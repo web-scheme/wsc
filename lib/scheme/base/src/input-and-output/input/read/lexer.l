@@ -1,6 +1,7 @@
 
 %{
 #include <stdbool.h>
+#include <math.h>
 
 #include "runtime/types.h"
 #include "parser.tab.h"
@@ -13,20 +14,18 @@ typedef double (*strtod_fn_t)(char const*    , char const**       , int);
 static double  strtod_integer(char const* str, char const** endptr, int base);
 static double strtod_rational(char const* str, char const** endptr, int base);
 static double  strtod_real_10(char const* str, char const** endptr, int base_unused);
-static sch_object_t parse_complex(char const* text, int base, strtod_fn_t strtod_fn);
+static sch_object_t parse_complex(char const* text, int length, int base, strtod_fn_t strtod_fn);
 %}
 
 %option noyywrap
-%option reentrant
-%option bison-bridge
-%option bison-locations
+%option reentrant bison-bridge bison-locations
 
 LINE_ENDING           \n|\r\n|\r
 INTRALINE_WHITESPACE  [ \t]
 WHITESPACE            {INTRALINE_WHITESPACE}|{LINE_ENDING}
 VERTICAL_LINE         \|
 
-/* multi-byte UTF-8 sequences, according to UTF-8 spec */
+/* multi-byte UTF-8 sequences */
 ANY_BYTE        [\x00-\xFF]
 ASCII           [\x00-\x7F]
 UTF8_2BYTE      [\xC0-\xDF][\x80-\xBF]
@@ -35,7 +34,6 @@ UTF8_4BYTE      [\xF0-\xF7][\x80-\xBF][\x80-\xBF][\x80-\xBF]
 UTF8_NON_ASCII  {UTF8_2BYTE}|{UTF8_3BYTE}|{UTF8_4BYTE}
 UTF8            {ASCII}|{UTF8_NON_ASCII}
 
-/* identifiers */
 /* TODO: Make sure to only match letters in the Unicode general categories of
  *       Lu, Ll, Lt, Lm, Lo, Mn, Mc, Me, Nd, Nl, No, Pd, Pc, Po, Sc, Sm, Sk, So, or Co,
  *       or is U+200C or U+200D. */
@@ -56,8 +54,6 @@ SYMBOL_ELEMENT            [^|\\]|{INLINE_HEX_ESCAPE}|{MNEMONIC_ESCAPE}|\\{VERTIC
 SIMPLE_IDENTIFIER         {INITIAL}{SUBSEQUENT}*
 VERTICAL_LINE_IDENTIFIER  {VERTICAL_LINE}{SYMBOL_ELEMENT}*{VERTICAL_LINE}
 PECULIAR_IDENTIFIER       {EXPLICIT_SIGN}|{EXPLICIT_SIGN}{SIGN_SUBSEQUENT}{SUBSEQUENT}*|{EXPLICIT_SIGN}\.{DOT_SUBSEQUENT}{SUBSEQUENT}*|\.{DOT_SUBSEQUENT}{SUBSEQUENT}*
-
-/* numbers */
 
 EXACTNESS        \#i|\#e
 SIGN             {EXPLICIT_SIGN}?
@@ -126,138 +122,25 @@ NUM_10_COMPLEX_REAL      {PREFIX_10}{COMPLEX_REAL_10}
 STRING_ELEMENT  [^"\\]|{MNEMONIC_ESCAPE}|\\\"|\\\\|\\{INTRALINE_WHITESPACE}*{LINE_ENDING}{INTRALINE_WHITESPACE}*|{INLINE_HEX_ESCAPE}
 STRING          \"{STRING_ELEMENT}*\"
 
-/* state for scanning balanced nested comments */
-%x NESTED_COMMENT
 /* state immediately after scanning a direcive, must be followed by a delimiter */
 %x POST_DIRECTIVE
+/* state for scanning balanced nested comments */
+%x NESTED_COMMENT
 
 %%
     /* Copied verbatim to beginning of `yylex`. */
     unsigned int comment_nesting = 0;
 
-"("    { return           TOKEN_LPAREN; }
-")"    { return           TOKEN_RPAREN; }
-"#("   { return          TOKEN_LVECTOR; }
-"#u8(" { return      TOKEN_LBYTEVECTOR; }
-"'"    { return            TOKEN_QUOTE; }
-"`"    { return       TOKEN_QUASIQUOTE; }
-","    { return          TOKEN_UNQUOTE; }
-",@"   { return TOKEN_UNQUOTE_SPLICING; }
-"."    { return              TOKEN_DOT; }
-"#;"   { return    TOKEN_DATUM_COMMENT; }
-
-"#f"|"#false"  { yylval = SCH_FALSE; return TOKEN_DATUM; }
-"#t"|"#true"   { yylval =  SCH_TRUE; return TOKEN_DATUM; }
-
-"#\\alarm"         { yylval = SCH_CHARACTER(0x07); return TOKEN_DATUM; }
-"#\\backspace"     { yylval = SCH_CHARACTER(0x08); return TOKEN_DATUM; }
-"#\\delete"        { yylval = SCH_CHARACTER(0x7F); return TOKEN_DATUM; }
-"#\\escape"        { yylval = SCH_CHARACTER(0x1B); return TOKEN_DATUM; }
-"#\\newline"       { yylval = SCH_CHARACTER(0x0A); return TOKEN_DATUM; }
-"#\\null"          { yylval = SCH_CHARACTER(0x00); return TOKEN_DATUM; }
-"#\\return"        { yylval = SCH_CHARACTER(0x0D); return TOKEN_DATUM; }
-"#\\space"         { yylval = SCH_CHARACTER(0x20); return TOKEN_DATUM; }
-"#\\tab"           { yylval = SCH_CHARACTER(0x09); return TOKEN_DATUM; }
-\#\\x[0-9A-Fa-f]+  { uint64_t point = (uint64_t)strtol(yytext + 3, NULL, 16);
-                     if (!is_valid_unicode(point)) {
-                         // TODO: Error?
-                     }
-                     yylval = SCH_CHARACTER(point);
-                     return TOKEN_DATUM; }
-\#\\{UTF8}         { yylval = SCH_CHARACTER(TODO);
-                     return TOKEN_DATUM; }
-
-{SIMPLE_IDENTIFIER}        { yylval = sch_symbol_make(yytext, yyleng);
-                             if (!is_all_valid_unicode(yylval.data)) {
-                                 /* TODO: Error? */
-                             }
-                             return TOKEN_DATUM; }
-{VERTICAL_LINE_IDENTIFIER} { yylval = sch_symbol_parse(yytext + 1, yyleng - 2);
-                             if (!is_all_valid_unicode(yylval.data)) {
-                                 /* TODO: Error? */
-                             }
-                             return TOKEN_DATUM; }
-{PECULIAR_IDENTIFIER}      { /* handle special cases `+i`, `-i`, `+inf.0`, `-inf.0`, `+nan.0`, `-nan.0` */
-                             if (yyleng == 2) {
-                                 if (yytext[1] == 'i') {
-                                     if (yytext[0] == '+') {
-                                         yylval = SCH_COMPLEX(0.0, 1.0);
-                                         return TOKEN_DATUM;
-                                     }
-                                     if (yytext[0] == '-') {
-                                         yylval = SCH_COMPLEX(0.0, -1.0);
-                                         return TOKEN_DATUM;
-                                     }
-                                 }
-                             } else if (yyleng == 6) {
-                                 if (yytext[4] == '.' && yytext[5] == '0') {
-                                     if (yytext[1] == 'i' && yytext[2] = 'n' && yytext[3] == 'f') {
-                                         if (yytext[0] == '+') {
-                                             yylval = SCH_REAL((double)(INFINITY));
-                                             return TOKEN_DATUM;
-                                         }
-                                         if (yytext[0] == '-') {
-                                             yylval = SCH_REAL((double)(-INFINITY));
-                                             return TOKEN_DATUM;
-                                         }
-                                     } else if (yytext[1] == 'n' && yytext[2] = 'a' && yytext[3] == 'n') {
-                                         if (yytext[0] == '+') {
-                                             yylval = SCH_REAL((double)(NAN));
-                                             return TOKEN_DATUM;
-                                         }
-                                         if (yytext[0] == '-') {
-                                             yylval = SCH_REAL((double)(-NAN));
-                                             return TOKEN_DATUM;
-                                         }
-                                     }
-                                 }
-                             }
-                             yylval = sch_symbol_make(yytext, yyleng);
-                             if (!is_all_valid_unicode(yylval.data)) {
-                                 /* TODO: Error? */
-                             }
-                             return TOKEN_DATUM; }
-
-{NUM_02_INTEGER}           { yylval =  parse_integer(yytext,  2);                   return TOKEN_DATUM; }
-{NUM_08_INTEGER}           { yylval =  parse_integer(yytext,  8);                   return TOKEN_DATUM; }
-{NUM_10_INTEGER}           { yylval =  parse_integer(yytext, 10);                   return TOKEN_DATUM; }
-{NUM_16_INTEGER}           { yylval =  parse_integer(yytext, 16);                   return TOKEN_DATUM; }
-{NUM_02_RATIONAL}          { yylval = parse_rational(yytext,  2);                   return TOKEN_DATUM; }
-{NUM_08_RATIONAL}          { yylval = parse_rational(yytext,  8);                   return TOKEN_DATUM; }
-{NUM_10_RATIONAL}          { yylval = parse_rational(yytext, 10);                   return TOKEN_DATUM; }
-{NUM_16_RATIONAL}          { yylval = parse_rational(yytext, 16);                   return TOKEN_DATUM; }
-{NUM_10_REAL}              { yylval =  parse_real_10(yytext);                       return TOKEN_DATUM; }
-{NUM_02_COMPLEX_INTEGER}   { yylval =  parse_complex(yytext,  2,  &strtod_integer); return TOKEN_DATUM; }
-{NUM_08_COMPLEX_INTEGER}   { yylval =  parse_complex(yytext,  8,  &strtod_integer); return TOKEN_DATUM; }
-{NUM_10_COMPLEX_INTEGER}   { yylval =  parse_complex(yytext, 10,  &strtod_integer); return TOKEN_DATUM; }
-{NUM_16_COMPLEX_INTEGER}   { yylval =  parse_complex(yytext, 16,  &strtod_integer); return TOKEN_DATUM; }
-{NUM_02_COMPLEX_RATIONAL}  { yylval =  parse_complex(yytext,  2, &strtod_rational); return TOKEN_DATUM; }
-{NUM_08_COMPLEX_RATIONAL}  { yylval =  parse_complex(yytext,  8, &strtod_rational); return TOKEN_DATUM; }
-{NUM_10_COMPLEX_RATIONAL}  { yylval =  parse_complex(yytext, 10, &strtod_rational); return TOKEN_DATUM; }
-{NUM_16_COMPLEX_RATIONAL}  { yylval =  parse_complex(yytext, 16, &strtod_rational); return TOKEN_DATUM; }
-{NUM_10_COMPLEX_REAL}      { yylval =  parse_complex(yytext, 10,  &strtod_real_10); return TOKEN_DATUM; }
-
-{STRING}  { yylval = parse_string(yytext + 1, yyleng - 2); }
-
-[ \t] {
-    // TODO: Ignore intraline whitespace, but increment the current column tracker.
-}
-{LINE_ENDING} {
-    // TODO: Ignore newlines, but increment the current line tracker.
-}
-
-;[^\n\r]* {
-    // TODO: Ignore line comment, but increment the current column tracker.
-}
-"#|"             { BEGIN(NESTED_COMMENT); }
-<NESTED_COMMENT>{
-  \#+\|          { ++comment_nesting; }
-  \|+\#          { if (comment_nesting > 0) --comment_nesting;
-                   else BEGIN(INITIAL); }
-  \#+|\|+        ;
-  [^#|\n\r]+     ;
-  {LINE_ENDING}  ;
-}
+"("    { _initial_lparen: return           TOKEN_LPAREN; }
+")"    { _initial_rparen: return           TOKEN_RPAREN; }
+"#("   {                  return          TOKEN_LVECTOR; }
+"#u8(" {                  return      TOKEN_LBYTEVECTOR; }
+"'"    {                  return            TOKEN_QUOTE; }
+"`"    {                  return       TOKEN_QUASIQUOTE; }
+","    {                  return          TOKEN_UNQUOTE; }
+",@"   {                  return TOKEN_UNQUOTE_SPLICING; }
+"."    {                  return              TOKEN_DOT; }
+"#;"   {                  return    TOKEN_DATUM_COMMENT; }
 
 "#!fold-case"     { BEGIN(POST_DIRECTIVE); return TOKEN_DIRECTIVE_FOLD_CASE; }
 "#!no-fold-case"  { BEGIN(POST_DIRECTIVE); return TOKEN_DIRECTIVE_NO_FOLD_CASE; }
@@ -266,29 +149,136 @@ STRING          \"{STRING_ELEMENT}*\"
    * with the exact same actions as in the initial state.
    */
 <POST_DIRECTIVE>{
-  "("                        { BEGIN(INITIAL); return TOKEN_LPAREN; }
-  ")"                        { BEGIN(INITIAL); return TOKEN_RPAREN; }
-  {VERTICAL_LINE_IDENTIFIER} { BEGIN(INITIAL);
-                               yylval = sch_symbol_parse(yytext + 1, yyleng - 2);
-                               if (!is_all_valid_unicode(yylval.data)) {
-                                   /* TODO: Error? */
-                               }
-                               return TOKEN_DATUM; }
-  {STRING}                   { BEGIN(INITIAL); return  TOKEN_DATUM; }
-  [ \t]                      { BEGIN(INITIAL); 
-                               /* TODO: Ignore intraline whitespace,
-                                *       but increment the current column tracker.*/ }
-  {LINE_ENDING}              { BEGIN(INITIAL); 
-                               /* TODO: Ignore newlines,
-                                *       but increment the current line tracker.*/ }
-  ;[^\n\r]*                  { BEGIN(INITIAL); 
-                               /* TODO: Ignore comments,
-                                *       but increment the current column tracker.*/ }
+  "("                        { BEGIN(INITIAL); goto                   _initial_lparen; }
+  ")"                        { BEGIN(INITIAL); goto                   _initial_rparen; }
+  {VERTICAL_LINE_IDENTIFIER} { BEGIN(INITIAL); goto _initial_vertical_line_identifier; }
+  {STRING}                   { BEGIN(INITIAL); goto                   _initial_string; }
+  {INTRALINE_WHITESPACE}     { BEGIN(INITIAL); goto     _initial_intraline_whitespace; }
+  {LINE_ENDING}              { BEGIN(INITIAL); goto              _initial_line_ending; }
+  ;[^\n\r]*                  { BEGIN(INITIAL); goto                  _initial_comment; }
 
   {UTF8}      { /* TODO: error unexpected character after directive */;
                 BEGIN(INITIAL); }
   {ANY_BYTE}  { /* TODO: error unexpected non-UTF8 byte after directive */;
                 BEGIN(INITIAL); }
+}
+
+\#{UINTEGER_10}\=  { *yylval = SCH_INTEGER(strtol(yytext + 1, NULL, 10));
+                     return TOKEN_LABEL_BINDING; }
+\#{UINTEGER_10}\#  { *yylval = SCH_INTEGER(strtol(yytext + 1, NULL, 10));
+                     return TOKEN_LABEL_REFERENCE; }
+
+{SIMPLE_IDENTIFIER}        { *yylval = sch_symbol_make(yytext, yyleng);
+                             if (!is_all_valid_unicode(yylval->data)) {
+                                 /* TODO: Error? */
+                             }
+                             return TOKEN_DATUM; }
+{VERTICAL_LINE_IDENTIFIER} { _initial_vertical_line_identifier:
+                             *yylval = sch_symbol_parse(yytext + 1, yyleng - 2);
+                             if (!is_all_valid_unicode(yylval->data)) {
+                                 /* TODO: Error? */
+                             }
+                             return TOKEN_DATUM; }
+{PECULIAR_IDENTIFIER}      { /* handle special cases `+i`, `-i`, `+inf.0`, `-inf.0`, `+nan.0`, `-nan.0` */
+                             if (yyleng == 2) {
+                                 if (yytext[1] == 'i') {
+                                     if (yytext[0] == '+') {
+                                         *yylval = SCH_COMPLEX(0.0, 1.0);
+                                         return TOKEN_DATUM;
+                                     }
+                                     if (yytext[0] == '-') {
+                                         *yylval = SCH_COMPLEX(0.0, -1.0);
+                                         return TOKEN_DATUM;
+                                     }
+                                 }
+                             } else if (yyleng == 6) {
+                                 if (yytext[4] == '.' && yytext[5] == '0') {
+                                     if (yytext[1] == 'i' && yytext[2] == 'n' && yytext[3] == 'f') {
+                                         if (yytext[0] == '+') {
+                                             *yylval = SCH_REAL((double)(INFINITY));
+                                             return TOKEN_DATUM;
+                                         }
+                                         if (yytext[0] == '-') {
+                                             *yylval = SCH_REAL((double)(-INFINITY));
+                                             return TOKEN_DATUM;
+                                         }
+                                     } else if (yytext[1] == 'n' && yytext[2] == 'a' && yytext[3] == 'n') {
+                                         if (yytext[0] == '+') {
+                                             *yylval = SCH_REAL((double)(NAN));
+                                             return TOKEN_DATUM;
+                                         }
+                                         if (yytext[0] == '-') {
+                                             *yylval = SCH_REAL((double)(-NAN));
+                                             return TOKEN_DATUM;
+                                         }
+                                     }
+                                 }
+                             }
+                             *yylval = sch_symbol_make(yytext, yyleng);
+                             if (!is_all_valid_unicode(*yylval->data)) {
+                                 /* TODO: Error? */
+                             }
+                             return TOKEN_DATUM; }
+
+"#f"|"#false"  { *yylval = SCH_FALSE; return TOKEN_DATUM; }
+"#t"|"#true"   { *yylval =  SCH_TRUE; return TOKEN_DATUM; }
+
+"#\\alarm"         { *yylval = SCH_CHARACTER(0x07); return TOKEN_DATUM; }
+"#\\backspace"     { *yylval = SCH_CHARACTER(0x08); return TOKEN_DATUM; }
+"#\\delete"        { *yylval = SCH_CHARACTER(0x7F); return TOKEN_DATUM; }
+"#\\escape"        { *yylval = SCH_CHARACTER(0x1B); return TOKEN_DATUM; }
+"#\\newline"       { *yylval = SCH_CHARACTER(0x0A); return TOKEN_DATUM; }
+"#\\null"          { *yylval = SCH_CHARACTER(0x00); return TOKEN_DATUM; }
+"#\\return"        { *yylval = SCH_CHARACTER(0x0D); return TOKEN_DATUM; }
+"#\\space"         { *yylval = SCH_CHARACTER(0x20); return TOKEN_DATUM; }
+"#\\tab"           { *yylval = SCH_CHARACTER(0x09); return TOKEN_DATUM; }
+\#\\x[0-9A-Fa-f]+  { uint64_t point = (uint64_t)strtol(yytext + 3, NULL, 16);
+                     if (!is_valid_unicode(point)) {
+                         // TODO: Error?
+                     }
+                     *yylval = SCH_CHARACTER(point);
+                     return TOKEN_DATUM; }
+\#\\{UTF8}         { *yylval = SCH_CHARACTER(TODO);
+                     return TOKEN_DATUM; }
+
+{NUM_02_INTEGER}           { *yylval =  parse_integer(yytext,  2);                           return TOKEN_DATUM; }
+{NUM_08_INTEGER}           { *yylval =  parse_integer(yytext,  8);                           return TOKEN_DATUM; }
+{NUM_10_INTEGER}           { *yylval =  parse_integer(yytext, 10);                           return TOKEN_DATUM; }
+{NUM_16_INTEGER}           { *yylval =  parse_integer(yytext, 16);                           return TOKEN_DATUM; }
+{NUM_02_RATIONAL}          { *yylval = parse_rational(yytext,  2);                           return TOKEN_DATUM; }
+{NUM_08_RATIONAL}          { *yylval = parse_rational(yytext,  8);                           return TOKEN_DATUM; }
+{NUM_10_RATIONAL}          { *yylval = parse_rational(yytext, 10);                           return TOKEN_DATUM; }
+{NUM_16_RATIONAL}          { *yylval = parse_rational(yytext, 16);                           return TOKEN_DATUM; }
+{NUM_10_REAL}              { *yylval =  parse_real_10(yytext);                               return TOKEN_DATUM; }
+{NUM_02_COMPLEX_INTEGER}   { *yylval =  parse_complex(yytext, yyleng,  2,  &strtod_integer); return TOKEN_DATUM; }
+{NUM_08_COMPLEX_INTEGER}   { *yylval =  parse_complex(yytext, yyleng,  8,  &strtod_integer); return TOKEN_DATUM; }
+{NUM_10_COMPLEX_INTEGER}   { *yylval =  parse_complex(yytext, yyleng, 10,  &strtod_integer); return TOKEN_DATUM; }
+{NUM_16_COMPLEX_INTEGER}   { *yylval =  parse_complex(yytext, yyleng, 16,  &strtod_integer); return TOKEN_DATUM; }
+{NUM_02_COMPLEX_RATIONAL}  { *yylval =  parse_complex(yytext, yyleng,  2, &strtod_rational); return TOKEN_DATUM; }
+{NUM_08_COMPLEX_RATIONAL}  { *yylval =  parse_complex(yytext, yyleng,  8, &strtod_rational); return TOKEN_DATUM; }
+{NUM_10_COMPLEX_RATIONAL}  { *yylval =  parse_complex(yytext, yyleng, 10, &strtod_rational); return TOKEN_DATUM; }
+{NUM_16_COMPLEX_RATIONAL}  { *yylval =  parse_complex(yytext, yyleng, 16, &strtod_rational); return TOKEN_DATUM; }
+{NUM_10_COMPLEX_REAL}      { *yylval =  parse_complex(yytext, yyleng, 10,  &strtod_real_10); return TOKEN_DATUM; }
+
+{STRING}  { _initial_string:
+            *yylval = parse_string(yytext + 1, yyleng - 2); }
+
+{INTRALINE_WHITESPACE} { _initial_intraline_whitespace:
+                         ; /* TODO: Ignore intraline whitespace,
+                          *       but increment the current column tracker. */ }
+{LINE_ENDING}          { _initial_line_ending:
+                         ; /* TODO: Ignore newlines, but increment the current line tracker. */ }
+
+;[^\n\r]*        { _initial_comment:
+                   ; /* TODO: Ignore line comment, but increment the current column tracker. */ }
+"#|"             { BEGIN(NESTED_COMMENT); }
+<NESTED_COMMENT>{
+  \#+\|          { ++comment_nesting; }
+  \|+\#          { if (comment_nesting > 0) --comment_nesting;
+                   else BEGIN(INITIAL); }
+  \#+|\|+        ;
+  [^#|\n\r]+     ;
+  {LINE_ENDING}  ;
 }
 
 {UTF8}      { /* TODO: error unexpected character after directive */; }
@@ -345,7 +335,7 @@ static sch_object_t parse_real_10(char const* text) {
   return SCH_REAL(strtod(text, NULL));
 }
 
-static sch_object_t parse_complex(char const* text, int base, strtod_fn_t strtod_fn) {
+static sch_object_t parse_complex(char const* text, int length, int base, strtod_fn_t strtod_fn) {
   bool exact = is_number_exact(&text, false);
   // TODO: Something with exactness.
   char const* endptr;
@@ -355,7 +345,7 @@ static sch_object_t parse_complex(char const* text, int base, strtod_fn_t strtod
       case '+':
           second_sign = 1.0;
       case '-':
-          if (yyleng == endptr - text + 2)
+          if (length == endptr - text + 2)
               second = second_sign;
           else switch (endptr[1]) {
               case 'i':
