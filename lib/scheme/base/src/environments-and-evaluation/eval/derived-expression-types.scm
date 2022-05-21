@@ -99,8 +99,7 @@ define-syntax let*
       let () body1 body2 ...
     (let* ((name1 val1) (name2 val2) ...) body1 body2 ...)
       let ((name1 val1))
-        let* ((name2 val2) ...)
-          body1 body2 ...
+        let* ((name2 val2) ...) body1 body2 ...
 
 ;; The following letrec macro uses the symbol `<undefined>` in place of an expression which returns something
 ;; that when stored in a location makes it an error to try to obtain the value stored in the location.
@@ -206,36 +205,36 @@ define-syntax do
 ;; Parameter objects are implemented here as procedures, using two arbitrary unique objects `<param-set!>` and `<param-convert>`:
 ;; TODO: Threadsafe.
 
-define (make-parameter init . o)
-  let* ((converter (if pair?(o) car(o) (lambda (x) x)))
-        (value (converter init)))
-    lambda args
-      cond
-        null?(args)
-          value
-        eq?(car(args) <param-set!>)
-          set!(value cadr(args))
-        eq?(car(args) <param-convert>)
-          converter
-        else
-          error("bad parameter syntax")
+;define (make-parameter init . o)
+;  let* ((converter (if pair?(o) car(o) (lambda (x) x)))
+;        (value (converter init)))
+;    lambda args
+;      cond
+;        null?(args)
+;          value
+;        eq?(car(args) <param-set!>)
+;          set!(value cadr(args))
+;        eq?(car(args) <param-convert>)
+;          converter
+;        else
+;          error("bad parameter syntax")
 
 ;; Then `parameterize` uses `dynamic-wind` to dynamically rebind the associated value:
 
-define-syntax parameterize
-  syntax-rules ()
-    (parameterize ("step") ((param value p old new) ...) () body)
-      let ((p param) ...)
-        let ((old (p)) ...
-             (new ((p <param-convert>) value)) ...)
-         dynamic-wind
-           lambda () (p <param-set!> new) ...
-           lambda () . body
-           lambda () (p <param-set!> old) ...
-    (parameterize ("step") args ((param value) . rest) body)
-      parameterize ("step") ((param value p old new) . args) rest body
-    (parameterize ((param value) ...) . body)
-      parameterize ("step") () ((param value) ...) body
+;define-syntax parameterize
+;  syntax-rules ()
+;    (parameterize ("step") ((param value p old new) ...) () body)
+;      let ((p param) ...)
+;        let ((old (p)) ...
+;             (new ((p <param-convert>) value)) ...)
+;         dynamic-wind
+;           lambda () (p <param-set!> new) ...
+;           lambda () . body
+;           lambda () (p <param-set!> old) ...
+;    (parameterize ("step") args ((param value) . rest) body)
+;      parameterize ("step") ((param value p old new) . args) rest body
+;    (parameterize ((param value) ...) . body)
+;      parameterize ("step") () ((param value) ...) body
 
 ;; `guard` is not defined via syntax rules.
 ;; TODO: Define it.
