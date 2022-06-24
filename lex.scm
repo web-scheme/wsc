@@ -8,10 +8,10 @@
 |#
 #!sweet
 
-import (chibi)       ; TODO: Remove.
+; TODO: Clean up imports.
 import (scheme base)
-import (srfi 115)    ; TODO: `(scheme regex)` when full R7RS.
-import (srfi 26)     ; cut / cute
+import (chibi)
+import (srfi 115)
 
 ;; Ultimate flex.
 define-syntax λ
@@ -200,49 +200,3 @@ letrec
         string-re            'string       => parse-string
   display(scanner("\"hey\""))
   newline()
-
-#|
-define compile(rules)
-  ;; Construct a monster regex of the form `(or ($ <pattern>) ...)`
-  ;; where all submatches are mutually exclusive.
-  ;; Pattern sets should be comprehensive i.e. return a match for any input,
-  ;; so exactly 1 numbered submatch matches every time.
-  define re regexp(`(or . ,map((λ (rule) `($ ,car(rule))) rules)))
-  ;; Organize the actions into a vector for random access.
-  ;; For each matched submatch, call the corresponding action, passing it:
-  ;;   - the current set of rules
-  ;;   - the current compiled scan function itself
-  define actions (vector . (map cdr rules))
-  ;; The compiled scan function reads the next token from a port and returns:
-  ;;   - the next token
-  ;;   - the next scan function
-  define scan(port)
-    vector-ref(actions
-               car(regexp-match-submatches(regexp-read(re port))))
-      rules \\ scan
-  scan
-
-;; Tokens that scan in both sweet and vanilla mode:
-define ambigustatory-patterns
-  list
-    cons "#!fold-case"
-      λ (rules scan)
-        values '() scan
-    cons "#!no-fold-case"
-      cut State.fold-case.set! <> #f
-
-  ;"#!fold-case" .
-  ;  λ ()
-  ;"#!no-fold-case" .
-  ;  λ ()
-  ;'(: (look-behind bol) "#!sweet" (look-ahead eol)) .
-  ;  λ ()
-  ;'(: (look-behind bol) "#!no-sweet" (look-ahead eol)) .
-  ;  λ ()
-  ;intraline-whitespace .
-  ;  λ ()
-  ;line-ending .
-  ;  λ ()
-  ;line-comment .
-  ;  λ ()
-|#
