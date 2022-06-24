@@ -37,24 +37,29 @@ define noop-scanner-fab() '()
 define-syntax *lexical-rules
   syntax-rules (=> @)
     ;; The most basic rule simply returns a static token with no l-value.
-    (*lexical-rules (patterns ...) (actions ...) (pattern token) rules ...)
-      *lexical-rules (patterns ... pattern)
-        (actions ... (token noop-l-value-fab noop-scanner-fab))
-        rules \\ ...
+    (*lexical-rules (*patterns ...) (*actions ...) (*pattern *token) *rules ...)
+      *lexical-rules (*patterns ... *pattern)
+        (*actions ... (*token noop-l-value-fab noop-scanner-fab))
+        *rules \\ ...
+    ;; Syntactic sugar for static l-value TODO: Document.
+    (*lexical-rules (*patterns ...) (*actions ...) (*pattern *token *l-value) *rules ...)
+      *lexical-rules (*patterns ... *pattern)
+        (*actions ... (*token (λ (text) *l-value) noop-scanner-fab))
+        *rules \\ ...
     ;; Supply a uniparametric function `l-value-fab`,
     ;; which is passed the text of the match, to return an l-value.
-    (*lexical-rules (patterns ...) (actions ...) (pattern token => l-value-fab) rules ...)
-      *lexical-rules (patterns ... pattern)
-        (actions ... (token l-value-fab noop-scanner-fab))
-        rules \\ ...
+    (*lexical-rules (*patterns ...) (*actions ...) (*pattern *token => *l-value-fab) *rules ...)
+      *lexical-rules (*patterns ... *pattern)
+        (*actions ... (*token *l-value-fab noop-scanner-fab))
+        *rules \\ ...
     ;; Supply a lazily-evaluated expression `scanner-expr`
     ;; which evaluates to a new scanner to be used for subsequent input (state transition).
-    (*lexical-rules (patterns ...) (actions ...) (pattern token @ scanner-expr) rules ...)
-      *lexical-rules (patterns ... pattern)
-        (actions ... (token noop-l-value-fab (λ () scanner-expr)))
-        rules \\ ...
+    (*lexical-rules (*patterns ...) (*actions ...) (*pattern *token @ *scanner-expr) *rules ...)
+      *lexical-rules (*patterns ... *pattern)
+        (*actions ... (*token noop-l-value-fab (λ () *scanner-expr)))
+        *rules \\ ...
     ;; Any other form of rule is invalid.
-    (*lexical-rules sres actions bad-rule rules ...)
+    (*lexical-rules sres *actions bad-rule rules ...)
       syntax-error("Malformed lexical rule" bad-rule)
     ;; The final transformation.
     (*lexical-rules (*patterns ...) ((*token *l-value-fab *scanner-fab) ...))
