@@ -95,13 +95,13 @@ define string-re
              (: "\\" any)))
       "\"")
 
-;define-library (s-lang lexical-rules)
-;  import (scheme base)
-;  export lexical-rules
-;  <* begin
-
+;; TODO: Try to get this incorporated in R7RS-large.
+;; Matching function that reads from a port.
 define regexp-read(re port)
   regexp-matches(re port)
+;; TODO: Try to get this incorporated in R7RS-large.
+;; Return the list of all submatch fields (numeric or named) that actually matched.
+;; Returns the field names (or numbers) rather than the matched text.
 define regexp-match-submatch-fields(match)
   define aux(i fields)
     if {i > 100}
@@ -112,6 +112,10 @@ define regexp-match-submatch-fields(match)
           cons(i fields)
           fields
   aux(1 '())
+
+define regexp-submatch-number(match)
+  ; TODO: Test assumption that only 1 thing ever matches (peculiar identifiers?).
+  car(regexp-match-submatch-fields(match))
 
 ;; Re-usable definitions of noop functions used in scanners:
 define noop-l-value-fab(match) '()
@@ -136,28 +140,60 @@ define-syntax *lexical-rules
       *lexical-rules (patterns ... pattern)
         (actions ... (token noop-l-value-fab (λ () scanner-expr)))
         rules \\ ...
+    ;; Any other form of rule is invalid.
     (*lexical-rules sres actions bad-rule rules ...)
       syntax-error("Malformed lexical rule" bad-rule)
-    (*lexical-rules (patterns ...) ((*token *l-value-fab *scanner-fab) ...))
-      let ((big-regex  regexp(`(or ($ ,patterns) ...)))
-           (actions    vector(values(*token *l-value-fab *scanner-fab) ...)))
-        λ (port)
-          letrec ((match           regexp-read(big-regex port))
-                  (submatch-field  car(regexp-match-submatch-fields(match)))
-                  (match-text      regexp-match-submatch(match submatch-field)))
-            let-values (((token l-value-fab scanner-fab)
-                         vector-ref(actions {submatch-field - 1})))
-              let ((new-scanner scanner-fab()))
-                if null?(new-scanner)
-                  `(,token ,l-value-fab(match-text))
-                  ;; TODO: Transition state.
-                  `(,token ,l-value-fab(match-text))
+    ;; The final transformation.
+    (*lexical-rules (*patterns ...) ((*token *l-value-fab *scanner-fab) ...))
+      letrec (;; Compile all the individual patterns into a super regex,
+              ;; giving each pattern a numbered submatch index
+              ;; (1-indexed, since submatch 0 is always whole match).
+              (super-regex regexp(`(or ($ ,*patterns) ...)))
+              ;; Combine all action information into a vector
+              ;; such that pattern `i` corresponds to action `i - 1`.
+              (actions vector(values(*token *l-value-fab *scanner-fab) ...))
+              (scanner
+                (λ (port)
+                  (let* ((match  regexp-read(super-regex port))
+                         (field  regexp-submatch-number(match))
+                         (text   regexp-match-submatch(match field)))
+                     (let-values (((token l-value-fab scanner-fab)
+                                   vector-ref(actions {field - 1})))
+                        (let* ((new-scanner scanner-fab())
+                               (next-scanner (if null?(new-scanner) scanner new-scanner)))
+                           (if null?(token)
+                              ;; If the token is null, try again from the same port.
+                              next-scanner(port)
+                              ;; Otherwise, return to the parser.
+                              values(token l-value-fab(text) next-scanner))))))))
+        scanner
 
+;;* Define a scanner:
+;;* a function which takes a textual input port,
+;;* consumes a single token,
+;;* and returns 3 values:
+;;*   - the token symbol
+;;*   - the l-value
+;;*   - the scanner for the next token
+;;*
+;;* The parser should call the returned scanner for the next token,
+;;* and so forth, always passing just a port.
+;;*
+;;* A scanner is defined by a list of rules.
+;;* Each rule can take 1 of 3 forms:
+;;*   - `(pattern token)`
+;;*     when `pattern` matches, return `token`, a null l-value, same scanner
+;;*   - `(pattern token => recipient)`
+;;*     On match, return `token`, and pass the matched text to `recipient`,
+;;*     returning that result for the l-value. Same scanner.
+;;*   - `(pattern token @ new-scaner)`
+;;*     On match, return `token`, a null l-value, and `new-scanner`.
+;;*     `new-scanner` should be another scanner defined using `lexical-rules`.
+;;*     You may want to use `letrec` for this.
 define-syntax lexical-rules
   syntax-rules ()
     (lexical-rules rules ...)
       *lexical-rules () () rules ...
-;*>
 
 define nested-comment-scanner(depth outer-scanner)
   lexical-rules
