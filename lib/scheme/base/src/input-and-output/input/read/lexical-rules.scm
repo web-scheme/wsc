@@ -1,10 +1,8 @@
-#|* Lexical Analysis 
+#|* Lexical Analyzer Generator
   *
-  * Define the WebScheme scanner,
-  * capable of scanning both "vanilla" s-expressions and "sweet" t-expressions.
-  *
-  * @see https://web-scheme.org/r7rs-small.pdf#subsection.7.1.1
-  * @see https://srfi.schemers.org/srfi-110/srfi-110.html
+  * A macro that transforms a series of rules of the form
+  *     pattern [ token ] [ => l-value-fab ] [ @ scanner-expr ]
+  * into a scanner function.
 |#
 #!sweet
 
@@ -37,36 +35,46 @@ define noop-scanner-fab() '()
 define-syntax *lexical-rules
   syntax-rules (=> @)
     ;; The most basic rule simply returns a static token with no l-value.
-    (*lexical-rules (*patterns ...) (*actions ...) (*pattern *token) *rules ...)
+    (*lexical-rules (*patterns ...) (*actions ...) (*pattern *token) *tail ...)
       *lexical-rules (*patterns ... *pattern)
         (*actions ... (*token noop-l-value-fab noop-scanner-fab))
-        *rules \\ ...
+        *tail \\ ...
     ;; Syntactic sugar for static l-value TODO: Document.
-    (*lexical-rules (*patterns ...) (*actions ...) (*pattern *token *l-value) *rules ...)
+    (*lexical-rules (*patterns ...) (*actions ...) (*pattern *token *l-value) *tail ...)
       *lexical-rules (*patterns ... *pattern)
         (*actions ... (*token (λ (text) *l-value) noop-scanner-fab))
-        *rules \\ ...
+        *tail \\ ...
     ;; Supply a uniparametric function `l-value-fab`,
     ;; which is passed the text of the match, to return an l-value.
-    (*lexical-rules (*patterns ...) (*actions ...) (*pattern *token => *l-value-fab) *rules ...)
+    (*lexical-rules (*patterns ...) (*actions ...) (*pattern *token => *l-value-fab) *tail ...)
       *lexical-rules (*patterns ... *pattern)
         (*actions ... (*token *l-value-fab noop-scanner-fab))
-        *rules \\ ...
+        *tail \\ ...
     ;; Supply a lazily-evaluated expression `scanner-expr`
     ;; which evaluates to a new scanner to be used for subsequent input (state transition).
-    (*lexical-rules (*patterns ...) (*actions ...) (*pattern *token @ *scanner-expr) *rules ...)
+    (*lexical-rules (*patterns ...) (*actions ...) (*pattern *token @ *scanner-expr) *tail ...)
       *lexical-rules (*patterns ... *pattern)
         (*actions ... (*token noop-l-value-fab (λ () *scanner-expr)))
-        *rules \\ ...
-    ;; Any other form of rule is invalid.
-    (*lexical-rules sres *actions bad-rule rules ...)
-      syntax-error("Malformed lexical rule" bad-rule)
+        *tail \\ ...
+    ;; Syntactic sugar for new scanner transition with null token.
+    (*lexical-rules (*patterns ...) (*actions ...) (*pattern @ *scanner-expr) *tail ...)
+      *lexical-rules (*patterns ... *pattern)
+        (*actions ... ('() noop-l-value-fab (λ () *scanner-expr)))
+        *tail \\ ...
+    ;; Assume an unstructured rule is just a pattern to be consumed.
+    ;; TODO: Document better.
+    (*lexical-rules (*patterns ...) (*actions ...) *pattern *tail ...)
+      *lexical-rules (*patterns ... *pattern)
+        (*actions ... ('() noop-l-value-fab noop-scanner-fab))
+        *tail \\ ...
     ;; The final transformation.
     (*lexical-rules (*patterns ...) ((*token *l-value-fab *scanner-fab) ...))
       letrec (;; Compile all the individual patterns into a super regex,
               ;; giving each pattern a numbered submatch index
               ;; (1-indexed, since submatch 0 is always whole match).
               (super-regex regexp(`(or ($ ,*patterns) ...)))
+              ; TODO: See if this works instead of above:
+              ; (super-regex regexp('(or ($ *patterns) ...)))
               ;; Combine all action information into a vector
               ;; such that pattern `i` corresponds to action `i - 1`.
               (actions vector(values(*token *l-value-fab *scanner-fab) ...))
@@ -99,6 +107,8 @@ define-syntax *lexical-rules
 ;;*
 ;;* A scanner is defined by a list of rules.
 ;;* Each rule can take 1 of 3 forms:
+;;*   - `(pattern)`
+;;*     when `pattern` matches, recurse (discard the match).
 ;;*   - `(pattern token)`
 ;;*     when `pattern` matches, return `token`, a null l-value, same scanner
 ;;*   - `(pattern token => recipient)`
