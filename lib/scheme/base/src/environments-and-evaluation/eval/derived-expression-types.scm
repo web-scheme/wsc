@@ -180,8 +180,8 @@ define-syntax define-values
 
 define-syntax begin
   syntax-rules ()
-    (begin exp ...)
-      ((lambda () exp ...))
+    (begin body ...)
+      (lambda () body ...)()
 
 ;; The following syntax definition of `do` uses a trick to expand the variable clauses.
 ;; As with `letrec` above, an auxiliary macro would also work.

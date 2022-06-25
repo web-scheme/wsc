@@ -15,7 +15,7 @@ define regexp-read(re port)
 ;; Returns the field names (or numbers) rather than the matched text.
 define regexp-match-submatch-fields(match)
   define aux(i fields)
-    if {i > 100}
+    if {i > 100}  ; TODO: Fix crude crutch.
       fields
       aux
         {i + 1}
@@ -31,6 +31,15 @@ define regexp-submatch-number(match)
 ;; Re-usable definitions of noop functions used in scanners:
 define noop-l-value-fab(match) '()
 define noop-scanner-fab() '()
+
+define-record-type annotated-token
+  annotate(token filename line column mark)
+  annotated?
+  token        token:     token=!  ; logical token (symbol)
+  filename  filename:  filename=!  ; source filename (string or null)
+  line          line:      line=!  ; source line number (integer)
+  column      column:    column=!  ; source column number (integer)
+  mark          mark:      mark=!  ; mark for hygienic macro expansion
 
 define-syntax *lexical-rules
   syntax-rules (=> @)
