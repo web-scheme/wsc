@@ -39,7 +39,7 @@ define-syntax *lexical-rules
       *lexical-rules (*patterns ... *pattern)
         (*actions ... (*token noop-l-value-fab noop-scanner-fab))
         *tail \\ ...
-    ;; Syntactic sugar for static l-value TODO: Document.
+    ;; Static l-value.
     (*lexical-rules (*patterns ...) (*actions ...) (*pattern *token *l-value) *tail ...)
       *lexical-rules (*patterns ... *pattern)
         (*actions ... (*token (λ (text) *l-value) noop-scanner-fab))
@@ -61,8 +61,7 @@ define-syntax *lexical-rules
       *lexical-rules (*patterns ... *pattern)
         (*actions ... ('() noop-l-value-fab (λ () *scanner-expr)))
         *tail \\ ...
-    ;; Assume an unstructured rule is just a pattern to be consumed.
-    ;; TODO: Document better.
+    ;; Assume an unstructured rule is just a pattern to be discarded.
     (*lexical-rules (*patterns ...) (*actions ...) *pattern *tail ...)
       *lexical-rules (*patterns ... *pattern)
         (*actions ... ('() noop-l-value-fab noop-scanner-fab))
@@ -108,16 +107,21 @@ define-syntax *lexical-rules
 ;;* A scanner is defined by a list of rules.
 ;;* Each rule can take 1 of 3 forms:
 ;;*   - `(pattern)`
-;;*     when `pattern` matches, recurse (discard the match).
+;;*     When `pattern` matches, recurse (discard the match).
+;;*   - `(pattern @ new-scaner)`
+;;*     Discard the match but recurse with the new scanner.
+;;*     `new-scanner` is an expression to be lazily evaluated,
+;;*     yielding another scanner defined using `lexical-rules`.
+;;*     You may want to use `letrec` for this.
 ;;*   - `(pattern token)`
-;;*     when `pattern` matches, return `token`, a null l-value, same scanner
+;;*     On match, return `token`, a null l-value, and the same scanner.
+;;*   - `(pattern token @ new-scaner)`
+;;*     On match, return `token`, a null l-value, and the new scanner.
+;;*   - `(pattern token l-value)`
+;;*     On match, return `token`, the static `l-value`, same scanner.
 ;;*   - `(pattern token => recipient)`
 ;;*     On match, return `token`, and pass the matched text to `recipient`,
 ;;*     returning that result for the l-value. Same scanner.
-;;*   - `(pattern token @ new-scaner)`
-;;*     On match, return `token`, a null l-value, and `new-scanner`.
-;;*     `new-scanner` should be another scanner defined using `lexical-rules`.
-;;*     You may want to use `letrec` for this.
 define-syntax lexical-rules
   syntax-rules ()
     (lexical-rules rules ...)
