@@ -1,3 +1,7 @@
+;;* Based on the Wright-Cartwright-Shinn pattern matcher
+;;* reference implementation by Alex Shinn.
+;;* @see http://synthcode.com/scheme/match.scm
+
 ;;;; match.scm -- portable hygienic pattern matcher -*- coding: utf-8 -*-
 ;;
 ;; This code is written by Alex Shinn and placed in the
@@ -301,19 +305,19 @@
 ;; code below that the binding `v' is a direct variable reference, not
 ;; an expression.
 
-(define-syntax match
+(define-syntax annotated-match
   (syntax-rules ()
-    ((match)
+    ((annotated-match)
      (match-syntax-error "missing match expression"))
-    ((match atom)
+    ((annotated-match atom)
      (match-syntax-error "no match clauses"))
-    ((match (app ...) (pat . body) ...)
+    ((annotated-match (app ...) (pat . body) ...)
      (let ((v (app ...)))
        (match-next v ((app ...) (set! (app ...))) (pat . body) ...)))
-    ((match #(vec ...) (pat . body) ...)
+    ((annotated-match #(vec ...) (pat . body) ...)
      (let ((v #(vec ...)))
        (match-next v (v (set! v)) (pat . body) ...)))
-    ((match atom (pat . body) ...)
+    ((annotated-match atom (pat . body) ...)
      (let ((v atom))
        (match-next v (atom (set! atom)) (pat . body) ...)))
     ))
@@ -952,7 +956,7 @@
 
 (define-syntax match-lambda
   (syntax-rules ()
-    ((_ (pattern . body) ...) (lambda (expr) (match expr (pattern . body) ...)))))
+    ((_ (pattern . body) ...) (lambda (expr) (annotated-match expr (pattern . body) ...)))))
 
 ;;> Similar to \scheme{match-lambda}.  Creates a procedure of any
 ;;> number of arguments, and matches the argument list against each
@@ -960,7 +964,7 @@
 
 (define-syntax match-lambda*
   (syntax-rules ()
-    ((_ (pattern . body) ...) (lambda expr (match expr (pattern . body) ...)))))
+    ((_ (pattern . body) ...) (lambda expr (annotated-match expr (pattern . body) ...)))))
 
 ;;> Matches each var to the corresponding expression, and evaluates
 ;;> the body with all match variables in scope.  Raises an error if
@@ -1010,7 +1014,7 @@
     ((_ () . body)
      (let () . body))
     ((_ ((pat expr) . rest) . body)
-     (match expr (pat (match-let* rest . body))))))
+     (annotated-match expr (pat (match-let* rest . body))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Challenge stage - unhygienic insertion.
