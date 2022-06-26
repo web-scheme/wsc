@@ -112,30 +112,35 @@ define scanner
     \\
       ;; The case-sensitive s-expression scanner:
       s-case-scanner
-        lexical-rules
-          "#!fold-case"                             @ nocase-scanner
-          "#!no-fold-case"        
-          "#!sweet"            '!sweet              @ sweet-scanner
-          "#!curly-infix"      '!sweet              @ sweet-scanner  ; TODO: Support semi-sweet.
-          "#!no-sweet"            
-          "#|"                                      @ nested-comment-scanner(0 s-case-scanner)
-          "#;"                                      @ datum-comment-scanner
-          `(: ";" (* nonl))       
-          "("                  'open-list
-          "#("                 'open-vector
-          "#u8("               'open-bytevector
-          ")"                  'close
-          "."                  'dot
-          "'"                  'quote               'quote
-          "`"                  'quasiquote          'quasiquote
-          ","                  'unquote             'unquote
-          ",@"                 'unquote-splicing    'unquote-splicing
-          identifier-re        'identifier          => string->symbol
-          true-re              'boolean             #t
-          false-re             'boolean             #f
-          number-re            'number              => string->number
-          character-re         'character           => parse-character
-          string-re            'string              => parse-string
-          label-set-re         'label-set           => parse-label
-          label-re             'label               => parse-label
+        lexical-rules (line column)
+          "#!fold-case"                                 @ nocase-scanner
+          "#!no-fold-case"
+          "#!sweet"                '!sweet              @ sweet-scanner  ; TODO: Support.
+          "#!curly-infix"          '!sweet              @ sweet-scanner  ; TODO: Support.
+          "#!no-sweet"
+          "#|"                                          @ nested-comment-scanner(0 s-case-scanner)
+          "#;"                                          @ datum-comment-scanner
+          `(: ";" (* nonl))
+          "("                      'open-list
+          "#("                     'open-vector
+          "#u8("                   'open-bytevector
+          ")"                      'close
+          "."                      'dot
+          "'"                      'quote               'quote
+          "`"                      'quasiquote          'quasiquote
+          ","                      'unquote             'unquote
+          ",@"                     'unquote-splicing    'unquote-splicing
+          true-re                  'boolean             #t
+          false-re                 'boolean             #f
+          ;; Number precedes identifier,
+          ;; because `+i`, `-i`, infinities and NaNs would otherwise parse as identifiers.
+          ;; TODO: Test that these special numbers parse correctly.
+          number-re                'number              => string->number
+          identifier-re            'identifier          => string->symbol
+          character-re             'character           => parse-character
+          string-re                'string              => parse-string
+          label-set-re             'label-set           => parse-label
+          label-re                 'label               => parse-label
+          intraline-whitespace-re                       => (λ (text) set!(column
+
     s-case-scanner
