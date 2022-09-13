@@ -15,6 +15,8 @@ GitHub stars appreciated!
 ## Contributing
 
 Join the [mailing list] to get updates and ask questions.
+Frankly, it'll probably be pretty quiet for a while,
+but hoping to pick up the pace as WASM matures.
 
 The source code is mostly written using [sweet-expressions].
 Only standard R⁷RS-small
