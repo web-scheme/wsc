@@ -1,4 +1,4 @@
-# S-lang
+# `s-lang`
 
 The [WebScheme] compiler.
 
@@ -14,6 +14,8 @@ GitHub stars appreciated!
 
 ## Contributing
 
+Read [bootstrap/README.md].
+
 Join the [mailing list] to get updates and ask questions.
 Frankly, it'll probably be pretty quiet for a while,
 but hoping to pick up the pace as WASM matures.
@@ -25,6 +27,7 @@ Some wrappers are used for bootstrapping with Guile.
 
 The implementation for the standard library lives in [`lib/scheme/base`].
 
+[bootstrap/README.md]: bootstrap/README.md
 [mailing list]: https://groups.google.com/a/web-scheme.org/g/dev
 [sweet-expressions]: https://srfi.schemers.org/srfi-110/srfi-110.html
 [intermediate hash tables]: https://srfi.schemers.org/srfi-125/srfi-125.html
