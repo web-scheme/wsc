@@ -1,0 +1,5 @@
+
+define hello()
+  display("hey there!")
+
+hello()

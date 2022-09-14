@@ -1,17 +1,20 @@
-project('S-lang',
-        version: '0.1',
+project('s-lang',
+        version: '0',
         default_options: ['warning_level=3'])
 
-lexer_generator = generator(find_program( 'flex', required: true),
-                            output: '@BASENAME@.yy.c',
-                            arguments: ['-o', '@OUTPUT@', '@INPUT@'])
-lexer = lexer_generator.process('lexer.l')
+guile = find_program('guile', required: true, version: '>=3.0.5')
+unsweeten = find_program('./bootstrap/readable/unsweeten')
+unsweetener = generator(unsweeten,
+                        capture: true,  # Capture output from stdout.
+                        output: '@BASENAME@.scm',
+                        arguments: ['@INPUT@'])
 
-parser_generator = generator(find_program('bison', required: true),
-                             output: ['@BASENAME@.tab.c', '@BASENAME@.tab.h'],
-                             arguments: ['@INPUT@', '--defines=@OUTPUT1@', '--output=@OUTPUT0@'])
-parser = parser_generator.process('parser.y')
-
-executable('s-lang',
-           lexer, parser,
-           install: true)
+custom_target('s-lang',
+              build_by_default: true,
+              # List all files as input,
+              # but only pass in the first one to the command.
+              input: unsweetener.process('bootstrap/src/main.sscm',
+                                         'bootstrap/illusions.sscm',
+                                         preserve_path_from: meson.current_source_dir()),
+              command: [guile, '-s', '@INPUT0@'],
+              output: 's-lang.wasm')
