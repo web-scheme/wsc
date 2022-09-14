@@ -1,0 +1,227 @@
+#!/bin/sh
+OPTIONS=""
+while true ; do
+  if [ "$#" -eq 0 ] ; then
+    break
+  fi
+  case "$1" in
+    -*) OPTIONS="$OPTIONS $1" ; shift ;;
+    *) break ;;
+  esac
+done
+if test "$#" = "0"; then
+  exec /usr/sbin/env GUILE_LOAD_PATH="$(dirname "$0")/.." guile --debug -q -s "$0" $OPTIONS 2>/dev/null
+else
+  cat "$@" | /usr/sbin/env GUILE_LOAD_PATH="$(dirname "$0")/.." guile --debug -q -s "$0" $OPTIONS 2>/dev/null
+  exit $?
+fi
+
+# Generated automatically, DO NOT EDIT!
+
+!#
+
+; This is a filter - it accepts sweet-expressions from standard input,
+; and prints their S-expression translation as output.
+; It preserves comments that are outside any sweet-expression, if they begin
+; with ";" on the left edge.
+
+; It can pretty-print - this takes extra time, but it makes the results
+; much easier to understand, and even if you don't look at it all the time,
+; it's very helpful when you DO choose to examine it.
+
+; However, pretty-printing depends on guile, and guile's pretty-printer
+; is NOT suitable for Common Lisp, and may not be great for other reasons.
+; To send Common Lisp, we MUST have quasiquote represented as ` and so on,
+; so that when it's received by Common Lisp it'll be translated correctly.
+; E.G.:
+; $ echo '`(a b c ,d)' | ./unsweeten -C  # This works for Common Lisp:
+;    `(a b c ,d)
+; $ echo '`(a b c ,d)' | ./unsweeten  # This won't:
+;   `(a b c (unquote d))
+
+(define load-pretty-print #t)
+
+; Load pretty-printer
+(if load-pretty-print
+  (use-modules (ice-9 pretty-print)))
+
+(use-modules (ice-9 getopt-long))
+
+(define common-lisp #f)
+(define use-my-write #f)
+
+; Load sweet.
+(cond-expand
+  (guile-2
+    (eval-when (compile load eval)
+      (set! %load-path (append %load-path '(".")))))
+  (guile
+    (set! %load-path (append %load-path '(".")))))
+(use-modules (readable kernel))
+
+
+(define linefeed (integer->char #x000A))
+
+; True if we are at column one (the beginning of a line), else false:
+(define column1 #t)
+
+(define (copy-line port)
+  ; Copy line from in to out - end on EOF or newline (but don't output it)
+  (let ((c (peek-char port)))
+    (cond
+      ((eof-object? c) c)
+      ((not (or (char=? c #\newline) (char=? c linefeed)))
+        (set! column1 #f)
+        (write-char (read-char port))
+        (copy-line port)))))
+
+; Define an association list mapping the Lisp function names which have
+; abbreviations ==> the list of characters in their abbreviation
+(define normal-abbreviations
+  '((quote "'")
+    (quasiquote "`")
+    (unquote ",")
+    (unquote-splicing ",@")))
+
+; Common Lisp unique abbreviations.
+; There's no need translate (function x) back to #', and older versions of
+; guile cannot read it, so don't do that translation.
+; TODO: There are many more #... that are not supported, see:
+; http://www.lispworks.com/documentation/HyperSpec/Body/02_dh.htm
+(define cl-abbreviations
+    '((+++SHARP-DOT-abbreviation+++ "#.")
+      (+++SHARP-PLUS-abbreviation+++ "#+")
+      (+++SHARP-COLON-abbreviation+++ "#:")
+      (+++SHARP-P-abbreviation+++ "#P")
+      (+++SHARP-QUOTE-abbreviation+++ "#'")
+      (+++CL-QUASIQUOTE-abbreviation+++ "`")
+      (+++CL-UNQUOTE-abbreviation+++ ",")
+      (+++CL-UNQUOTE-SPLICING-abbreviation+++ ",@")))
+
+; return #t if we should as a traditional abbreviation, e.g., '
+(define (represent-as-abbreviation? x abbreviations)
+  (and
+    (pair? x)
+    (assq (car x) abbreviations)
+    (pair? (cdr x))
+    (null? (cddr x))))
+
+
+(define (my-write-list-contents x)
+  (cond
+    ((pair? x)
+      (my-write-body (car x))
+      (if (not (null? (cdr x)))
+        (begin
+          (display " ")
+          (my-write-list-contents (cdr x)))
+        (values)))
+    ((null? x) (values))
+    (#t
+      (display ". ")
+      (my-write-body x))))
+
+; Special write routine, e.g., so that it will produce lists that
+; Common Lisp will accept.
+(define (my-write-body x)
+  (cond
+    ((pair? x)
+      (cond
+        ((represent-as-abbreviation? x normal-abbreviations)
+          (display (cadr (assq (car x) normal-abbreviations)))
+          (my-write-body (cadr x)))
+        ((and common-lisp (represent-as-abbreviation? x cl-abbreviations))
+          (display (cadr (assq (car x) cl-abbreviations)))
+          (my-write-body (cadr x)))
+        (#t
+          (display "(")
+          (my-write-list-contents x)
+          (display ")"))))
+    (#t
+      (if (and common-lisp (assq x cl-abbreviations))
+          (begin (display " . ") (display (cadr (assq x cl-abbreviations))))
+          (write x)))))
+
+(define (my-write x)
+  (my-write-body x)
+  (newline))
+
+; Sweet-filter - Convert, preserve comments outside a datum, and
+; specially handle beginning-of-line special formats ";#", ";!", and ";_"
+; Change "pretty-print" to "write" if speed is critical.
+(define (sweet-filter port)
+  (let ((c (peek-char port)))
+    (cond
+      ((eof-object? c) c)
+      ((or (char=? c #\newline ) (char=? c linefeed))
+        (set! column1 #t)
+        (write-char (read-char port))
+        (force-output) ; guile, flush output so interactive use okay.
+        (sweet-filter port))
+      ((char=? c #\; )
+        (read-char port) ; Consume semicolon.
+        (let ((c2 (peek-char port)))
+          (cond
+            ; Pass ;# and ;! but WITHOUT the leading semicolon:
+            ((and column1 (or (eq? c2 #\#) (eq? c2 #\!)))
+              (copy-line port) (sweet-filter port))
+            ; Pass ;_ WITHOUT EITHER leading character:
+            ((and column1 (eq? c2 #\_))
+              (read-char port) (copy-line port) (sweet-filter port))
+            (#t
+                (set! column1 #f)
+                (write-char c)
+                (copy-line port)
+                (sweet-filter port)))))
+      (#t
+        (let ((result (sweet-read port)))
+          (if (eof-object? result)
+            result
+            (begin
+              (if use-my-write
+                (my-write result)
+                (pretty-print result))
+              (sweet-filter port))))))))
+
+
+; Older, simpler version:
+; (define (sweet-filter port)
+;   (let ((result (sweet-read (current-input-port))))
+;     (if (eof-object? result)
+;       result
+;       (begin (write result) (newline) (sweet-filter port)))))
+
+
+(define (main args)
+  (let* ((option-spec '((help    (single-char #\h) (value #f))
+                        (version (single-char #\v) (value #f))
+                        (write   (single-char #\w) (value #f))
+                        (common-lisp (single-char #\C) (value #f))))
+         (options (getopt-long args option-spec))
+         (help-wanted (option-ref options 'help #f))
+         (version-wanted (option-ref options 'version #f)))
+    (set! common-lisp (option-ref options 'common-lisp #f))
+    (set! use-my-write (option-ref options 'write #f))
+    (if common-lisp
+      (begin
+        (set! use-my-write #t)
+        (set-read-mode 'common-lisp (current-input-port))))
+    (if (not load-pretty-print) (set! use-my-write #t))
+    (if (or version-wanted help-wanted)
+        (begin
+          (if version-wanted
+            (display "unsweeten version 0.9\n"))
+          (if help-wanted
+                   (display "\
+     unsweeten [options]
+       -v, --version     Display version
+       -h, --help        Display this help
+       -w, --write       Use built-in simple one-line writer
+       -C, --common-lisp Process Common Lisp (forces -w)
+     ")))
+        (begin
+          (set-read-mode 'literal-barred-symbol (current-input-port))
+          (sweet-filter (current-input-port))))))
+
+(main (command-line))
+

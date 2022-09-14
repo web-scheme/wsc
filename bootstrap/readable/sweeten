@@ -1,0 +1,1559 @@
+#!/bin/sh
+OPTIONS=""
+while true ; do
+  if [ "$#" -eq 0 ] ; then
+    break
+  fi
+  case "$1" in
+    -*) OPTIONS="$OPTIONS $1" ; shift ;;
+    *) break ;;
+  esac
+done
+if test "$#" = "0"; then
+  exec /usr/sbin/env GUILE_LOAD_PATH="$(dirname "$0")/.." guile --debug -q -s "$0" $OPTIONS 2>/dev/null
+else
+  cat "$@" | /usr/sbin/env GUILE_LOAD_PATH="$(dirname "$0")/.." guile --debug -q -s "$0" $OPTIONS 2>/dev/null
+  exit $?
+fi
+
+# Generated automatically, DO NOT EDIT!
+
+!#
+;;; sweeten.sscm
+;;; Filter to read S-expressions and output indented sweet-expressions.
+;;;
+;;; Copyright (C) 2006-2013 David A. Wheeler.
+;;;
+;;; This software is released as open source software under the "MIT" license:
+;;;
+;;; Permission is hereby granted, free of charge, to any person obtaining a
+;;; copy of this software and associated documentation files (the "Software"),
+;;; to deal in the Software without restriction, including without limitation
+;;; the rights to use, copy, modify, merge, publish, distribute, sublicense,
+;;; and/or sell copies of the Software, and to permit persons to whom the
+;;; Software is furnished to do so, subject to the following conditions:
+;;;
+;;; The above copyright notice and this permission notice shall be included
+;;; in all copies or substantial portions of the Software.
+;;;
+;;; THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+;;; IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+;;; FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+;;; THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+;;; OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+;;; ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+;;; OTHER DEALINGS IN THE SOFTWARE.
+;;
+;;; This reformats standard input from s-expressions into sweet-expressions.
+;;; Internally, many functions develop possible representations as a list
+;;; of characters; various alternatives are tried out and the "best" is used.
+;;; For example, a "boring" list (with only non-pairs and a length of at
+;;; least boring-length) is probably data and is represented differently.
+;;;
+;;; Key functions include:
+;;; sweeten-top(): Returns a list-of-characters representation of an
+;;;   expression; it may generate multiple lines with indentation.
+;;;   Indentation must be active at the start of the line.
+;;; line(): Return a list-of-characters representation of *one* line
+;;;   of space-separated neoteric-expression units.
+;;;   The generated result may be rejected, e.g., if it's too long.
+;;;   Indentation must be active at the start of the line.
+;;; unit(): Return a list-of-characters representation of some unit.
+;;;   Indentation processing *may* be active, but the character sequence
+;;;   returned must not depend on that; it returns a list without newline.
+;;;
+;;; For debugging, add "--debug" after the two @ GUILE @ statements at the
+;;; beginning of the file; this will enable very useful backtraces.
+;;
+;;; Set build-on-top to #t if you want to run while invoking the
+;;; sweet module directly.
+;;; We need to explicitly *disable* the sweet-reader if it's active so that we
+;;; get the "old" reader format on read; this is important for handling
+;;; badly-formatted old files.   In the standard build this is unnecessary.
+
+(define build-on-sweet #f)
+(if build-on-sweet
+  (use-modules (readable kernel)))
+
+; This guile-specific library does option processing for us.
+(use-modules (ice-9 getopt-long))
+
+
+; Here are settings that control the "look" of the formatted result.
+; In the future these might be controlled via option flags.
+; Note that maxwidth may be violated if, at a current indent, there is a
+; long non-pair that exceeds it.  Other than that, it's respected,
+; so it's unlikely to exceed this width in practice:
+(define maxwidth 78)
+(define indent-increment '(#\space #\space))
+(define marked-indent-increment '(#\! #\space))
+(define min-indent-marking
+  (* (length indent-increment) 3))
+(define max-unit-character-length 60)
+(define max-unit-list-length 8)
+(define max-uncomplicated-meta-length 9)
+(define boring-length 16)
+
+(define special-infix-operators '(and or xor))
+
+; This is a list of operators that we prefer to present as "cuddled" with
+; one following parameter. In other words, if multi-line, show these as
+; "OPERATOR FIRST-PARAMETER" followed by other parameters as child lines.
+; This is different from the usual multi-line format, which is just
+; "OPERATOR" on the first line followed by child lines.
+; This format is used when in typical uses the first parameter is *special*
+; and has a different semantic meaning from later parameters,
+; such as defining operators and control flow operators.
+; This refinement isn't *necessary* but I think it looks better.
+; The "complicated?" routine, below, will recommend that lists with these
+; operators be split into multiple lines if their parameters are complex.
+; We actually cuddle TWO parameters for Common Lisp defun, but that's
+; so unusual that we handle "defun" as a separate special case.
+(define cuddle-first-parameter
+  '(if when
+     unless
+     case
+     define
+     lambda
+     define-module
+     library
+     export
+     import
+     letrec
+     let
+     let*
+     let1
+     let-syntax
+     letcrec-syntax
+     define-syntax
+     syntax-rules
+     set!
+     do
+     setq
+     block
+     typecase
+     defvar
+     defconstant
+     defstruct
+     defparameter))
+
+(define let-likes '(let let*))
+
+; Control what symbol is used for grouping.  This isn't likely to change
+; now, but it was a subject of long mailing list discussion.
+(define group-string "\\\\")
+(define group-list (string->list group-string))
+(define group-string-newline
+  (string-append group-string "\n"))
+
+; Control how to read input. If use-builtin-reader is #f, then
+; we'll just call "read" to read a datum.
+(define common-lisp #f)
+(define use-builtin-reader #f)
+(define literal-barred-symbol #t)
+
+
+; Other special characters and lists of characters.
+(define tab (integer->char 9))
+(define carriage-return (integer->char 13))
+(define LISTLP (list #\())
+(define LISTRP (list #\)))
+(define LISTLBRACE (list (integer->char 123)))
+(define LISTRBRACE (list (integer->char 125)))
+(define LIST.SP (list #\. #\space))
+(define LISTSP.SP (list #\space #\. #\space))
+(define punct-chars
+  (list #\!
+        #\"
+        #\#
+        #\$
+        #\%
+        #\&
+        #\'
+        #\(
+        #\)
+        #\*
+        #\+
+        #\,
+        #\-
+        #\.
+        #\/
+        #\:
+        #\;
+        #\<
+        #\=
+        #\>
+        #\?
+        #\@
+        #\[
+        #\\
+        #\]
+        #\^
+        #\_
+        #\`
+        #\{
+        #\|
+        #\}
+        #\~))
+
+; This program automatically handles various end-of-line situations.
+; An end-of-line if LF, CR, or CRLF; that is, (\n | \r \n?)
+(define end-of-line-chars
+  (list (integer->char 10) (integer->char 13)))
+
+; Returns #f if x has >1 element. Improper lists are #t.
+(define (multi-element-list? x)
+  (and (pair? x) (not (null? (cdr x)))))
+
+; Returns #t if x is a list with exactly 1 element.  Improper lists are #f.
+(define (list1? x)
+  (and (pair? x) (null? (cdr x))))
+
+; Returns #t if x is a list with exactly 2 elements.  Improper lists are #f.
+(define (list2? x)
+  (and (pair? x) (pair? (cdr x)) (null? (cddr x))))
+
+; Returns #t if x is a list or improper list of 3+ elements.
+(define (list-3-plus? x)
+  (and (pair? x) (pair? (cdr x)) (pair? (cddr x))))
+
+; Does x contain a list of ONLY punctuation characters?
+; An empty list is considered true.
+(define (contains-only-punctuation? x)
+  (cond ((null? x) #t)
+        ((not (pair? x)) #f)
+        ((memq (car x) punct-chars)
+         (contains-only-punctuation? (cdr x)))
+        (#t #f)))
+
+; Here we have our own reader implementation, in case we want to use that
+; instead of the host system's "read" (currently guile's).
+
+(define (my-string-foldcase s)
+  (string-downcase s))
+(define hash-pipe-comment-nests? #t)
+
+(define is-foldcase #f)
+(define tab (integer->char 9))
+(define linefeed (integer->char 10))
+(define carriage-return (integer->char 13))
+(define line-tab (integer->char 13))
+(define form-feed (integer->char 12))
+(define vertical-tab (integer->char 11))
+(define space '#\space)
+(define period-symbol (string->symbol "."))
+(define line-ending-chars
+  (list linefeed carriage-return))
+(define whitespace-chars-ascii
+  (list tab
+        linefeed
+        line-tab
+        form-feed
+        carriage-return
+        #\space))
+
+(define whitespace-chars whitespace-chars-ascii)
+(define (char-line-ending? char)
+  (memv char line-ending-chars))
+(define (my-char-whitespace? c)
+  (or (char-whitespace? c)
+      (memv c whitespace-chars)))
+
+(define (consume-end-of-line port)
+  (let ((c (peek-char port)))
+    (cond ((eqv? c carriage-return)
+           (read-char port)
+           (if (eqv? (peek-char port) linefeed)
+             (read-char port)))
+          ((eqv? c linefeed) (read-char port)))))
+
+(define (consume-to-eol port)
+  (let ((c (peek-char port)))
+    (cond ((and (not (eof-object? c))
+                (not (char-line-ending? c)))
+           (read-char port)
+           (consume-to-eol port)))))
+
+(define (consume-to-whitespace port)
+  (let ((c (peek-char port)))
+    (cond ((eof-object? c) c)
+          ((my-char-whitespace? c) '())
+          (#t
+           (read-char port)
+           (consume-to-whitespace port)))))
+
+(define (read-error message)
+  (display "Error: " (current-error-port))
+  (display message (current-error-port))
+  (newline (current-error-port))
+  (throw 'readable)
+  '())
+
+(define (get-sourceinfo port) '())
+(define (attach-sourceinfo pos datum) datum)
+
+(define debugger-output #f)
+(define (debug-show marker data)
+  (cond (debugger-output
+         (display "DEBUG: ")
+         (display marker)
+         (display " = ")
+         (write data)
+         (display "\n")))
+  data)
+
+(define (my-read-delimited-list stop-char port)
+  (consume-whitespace port)
+  (let* ((pos (get-sourceinfo port))
+         (c (peek-char port)))
+    (cond ((eof-object? c)
+           (read-error "EOF in middle of list")
+           c)
+          ((char=? c stop-char)
+           (read-char port)
+           (attach-sourceinfo pos '()))
+          ((memv c '(#\) #\] #\}))
+           (read-error "Bad closing character")
+           c)
+          (#t
+           (let ((datum (my-read port)))
+             (cond ((and (eq? datum period-symbol) (char=? c #\.))
+                    (let ((datum2 (my-read port)))
+                      (consume-whitespace port)
+                      (cond ((eof-object? datum2)
+                             (read-error "Early eof in (... .)")
+                             '())
+                            ((not (eqv? (peek-char port) stop-char))
+                             (read-error
+                               "Bad closing character after . datum")
+                             datum2)
+                            (#t (read-char port) datum2))))
+                   (#t
+                    (attach-sourceinfo
+                      pos
+                      (cons datum
+                            (my-read-delimited-list stop-char port))))))))))
+
+(define my-delimiters
+  (append
+    (list #\( #\) #\[ #\] #\{ #\} #\" #\;)
+    whitespace-chars))
+
+(define (consume-whitespace port)
+  (let ((char (peek-char port)))
+    (cond ((eof-object? char))
+          ((eqv? char #\;)
+           (consume-to-eol port)
+           (consume-whitespace port))
+          ((my-char-whitespace? char)
+           (read-char port)
+           (consume-whitespace port)))))
+
+(define (read-until-delim port delims)
+  (let ((c (peek-char port)))
+    (cond ((eof-object? c) '())
+          ((memv c delims) '())
+          (#t
+           (read-char port)
+           (cons c (read-until-delim port delims))))))
+
+(define (read-number port starting-lyst)
+  (string->number
+    (list->string
+      (append
+        starting-lyst
+        (read-until-delim port my-delimiters)))))
+
+(define (read-digits port)
+  (let ((c (peek-char port)))
+    (cond ((memv c digits)
+           (cons (read-char port) (read-digits port)))
+          (#t '()))))
+
+(define char-name-values
+  '((space 32)
+    (newline 10)
+    (nl 10)
+    (tab 9)
+    (nul 0)
+    (null 0)
+    (alarm 7)
+    (backspace 8)
+    (linefeed 10)
+    (vtab 11)
+    (page 12)
+    (return 13)
+    (esc 27)
+    (delete 127)
+    (soh 1)
+    (stx 2)
+    (etx 3)
+    (eot 4)
+    (enq 5)
+    (ack 6)
+    (bel 7)
+    (bs 8)
+    (ht 9)
+    (lf 10)
+    (vt 11)
+    (ff 12)
+    (np 12)
+    (cr 13)
+    (so 14)
+    (si 15)
+    (dle 16)
+    (dc1 17)
+    (dc2 18)
+    (dc3 19)
+    (dc4 20)
+    (nak 21)
+    (syn 22)
+    (etb 23)
+    (can 24)
+    (em 25)
+    (sub 26)
+    (fs 28)
+    (gs 29)
+    (rs 30)
+    (sp 32)
+    (del 127)
+    (rubout 127)))
+
+(define (process-char port)
+  (cond ((eof-object? (peek-char port)) (peek-char port))
+        (#t
+         (let ((c (read-char port))
+               (rest (read-until-delim port my-delimiters)))
+           (cond ((null? rest) c)
+                 (#t
+                  (let* ((cname (string->symbol
+                                  (string-downcase
+                                    (list->string (cons c rest)))))
+                         (found (assq cname char-name-values)))
+                    (if found
+                      (integer->char (cadr found))
+                      (read-error "Invalid character name")))))))))
+
+(define (fold-case-maybe port s)
+  (if is-foldcase (my-string-foldcase s) s))
+
+(define (process-directive dir)
+  (cond ((string-ci=? dir "fold-case")
+         (set! is-foldcase #t))
+        ((string-ci=? dir "no-fold-case")
+         (set! is-foldcase #f))
+        (#t
+         (display "Warning: Unknown process directive"))))
+
+(define (non-nest-comment port)
+  (let ((c (read-char port)))
+    (cond ((eof-object? c) (values))
+          ((char=? c #\!)
+           (let ((c2 (peek-char port)))
+             (if (char=? c2 #\#)
+               (begin (read-char port) (values))
+               (non-nest-comment port))))
+          (#t (non-nest-comment port)))))
+
+(define (process-sharp-bang port)
+  (let ((c (peek-char port)))
+    (cond ((char=? c #\space)
+           (consume-to-eol port)
+           (consume-end-of-line port)
+           scomment-result)
+          ((memv c '(#\/ #\.))
+           (non-nest-comment port)
+           scomment-result)
+          ((char-alphabetic? c)
+           (process-directive
+             (list->string
+               (read-until-delim port my-delimiters)))
+           scomment-result)
+          ((or (eqv? c carriage-return) (eqv? c #\newline))
+           (consume-to-eol port)
+           (consume-end-of-line port)
+           scomment-result)
+          (#t (read-error "Unsupported #! combination")))))
+
+(define unmatched-datum-label-tag
+  (cons 'unmatched-datum-label-tag 'label))
+
+(define (is-matching-label-tag? number value)
+  (and (pair? value)
+       (eq? (car value) unmatched-datum-label-tag)
+       (eqv? (cdr value) number)))
+
+(define (patch-datum-label-tail
+         number
+         replace
+         position
+         skip)
+  (let ((new-skip (cons position skip)))
+    (cond ((and (pair? position)
+                (not (eq? (car position) unmatched-datum-label-tag))
+                (not (memq position skip)))
+           (if (is-matching-label-tag? number (car position))
+             (set-car! position replace)
+             (patch-datum-label-tail
+               number
+               replace
+               (car position)
+               new-skip))
+           (if (is-matching-label-tag? number (cdr position))
+             (set-cdr! position replace)
+             (patch-datum-label-tail
+               number
+               replace
+               (cdr position)
+               new-skip)))
+          ((vector? position)
+           (do ((len (vector-length position)) (k 0 (+ k 1)))
+               ((>= k len) (values))
+             (let ((x (vector-ref position k)))
+               (if (is-matching-label-tag? number x)
+                 (vector-set! position k replace)
+                 (patch-datum-label-tail
+                   number
+                   replace
+                   x
+                   new-skip)))))
+          (#t (values)))))
+(define (patch-datum-label number starting-position)
+  (if (is-matching-label-tag? number starting-position)
+    (read-error
+      "Illegal reference as the labelled object itself"))
+  (patch-datum-label-tail
+    number
+    starting-position
+    starting-position
+    '())
+  starting-position)
+
+(define (gobble-chars port to-gobble)
+  (if (null? to-gobble)
+    0
+    (cond ((char-ci=? (peek-char port) (car to-gobble))
+           (read-char port)
+           (gobble-chars port (cdr to-gobble)))
+          (#t (length to-gobble)))))
+
+(define scomment-result '(scomment ()))
+
+(define (process-sharp port)
+  (let ((c (peek-char port)))
+    (cond ((eof-object? c) scomment-result)
+          ((char-line-ending? c) scomment-result)
+          (#t
+           (read-char port)
+           (or (and common-lisp (parse-cl c port))
+               (parse-hash c port)
+               (parse-default c port)
+               (read-error "Invalid #-prefixed string"))))))
+
+(define (parse-default c port)
+  (cond ((char-ci=? c #\t)
+         (if (memv (gobble-chars port '(#\r #\u #\e)) '(0 3))
+           '(normal #t)
+           (read-error "Incomplete #true")))
+        ((char-ci=? c #\f)
+         (if (memv (gobble-chars port '(#\a #\l #\s #\e))
+                   '(0 4))
+           '(normal #f)
+           (read-error "Incomplete #false")))
+        ((memv c
+               '(#\i #\e #\b #\o #\d #\x #\I #\E #\B #\O #\D #\X))
+         (let ((num (read-number port (list #\# (char-downcase c)))))
+           (if num
+             `(normal ,num)
+             (read-error "Not a number after number start"))))
+        ((char=? c #\()
+         (list 'normal
+               (list->vector (my-read-delimited-list #\) port))))
+        ((char=? c #\u)
+         (cond ((not (eqv? (read-char port) #\8))
+                (read-error "#u must be followed by 8"))
+               ((not (eqv? (read-char port) #\())
+                (read-error "#u8 must be followed by left paren"))
+               (#t
+                (list 'normal
+                      (list->u8vector
+                        (my-read-delimited-list #\) port))))))
+        ((char=? c #\\)
+         (list 'normal (process-char port)))
+        ((char=? c #\;) (my-read port) scomment-result)
+        ((char=? c #\|)
+         (nest-comment port)
+         scomment-result)
+        ((char=? c #\!) (process-sharp-bang port))
+        ((memv c digits)
+         (let* ((my-digits (read-digits port))
+                (label (string->number
+                         (list->string (cons c my-digits)))))
+           (cond ((eqv? (peek-char port) #\#)
+                  (read-char port)
+                  (list 'normal
+                        (cons unmatched-datum-label-tag label)))
+                 ((eqv? (peek-char port) #\=)
+                  (read-char port)
+                  (if (my-char-whitespace? (peek-char port))
+                    (read-error "#num= followed by whitespace"))
+                  (list 'normal
+                        (patch-datum-label label (my-read port))))
+                 (#t
+                  (read-error "Datum label #NUM requires = or #")))))
+        ((char=? c #\') '(abbrev syntax))
+        ((char=? c #\`) '(abbrev quasisyntax))
+        ((char=? c #\,)
+         (let ((c2 (peek-char port)))
+           (cond ((char=? c2 #\@)
+                  (read-char port)
+                  '(abbrev unsyntax-splicing))
+                 (#t '(abbrev unsyntax)))))
+        ((or (char=? c #\space) (char=? c tab))
+         (consume-to-eol port)
+         scomment-result)
+        (#t #f)))
+
+; Given character "c" after #, what does it parse as (if anything)?
+(define (parse-cl c port)
+  (cond ((char=? c #\')
+         '(abbrev +++SHARP-QUOTE-abbreviation+++))
+        ((char=? c #\:)
+         '(abbrev +++SHARP-COLON-abbreviation+++))
+        ((char=? c #\.)
+         '(abbrev +++SHARP-DOT-abbreviation+++))
+        ((char=? c #\+)
+         '(abbrev +++SHARP-PLUS-abbreviation+++))
+        ((char=? c #\P)
+         '(abbrev +++SHARP-P-abbreviation+++))
+        (#t #f)))
+
+; Given Scheme symbol x, should we translate it for CL (and if so, to what)?
+(define (translate-cl x)
+  (if common-lisp
+    (case x
+      ((quasiquote) '+++CL-QUASIQUOTE-abbreviation+++)
+      ((unquote) '+++CL-UNQUOTE-abbreviation+++)
+      ((unquote-splicing)
+       '+++CL-UNQUOTE-SPLICING-abbreviation+++)
+      (else x))
+    x))
+
+; Reverse map from CL back to display
+(define map-cl
+  '((+++SHARP-QUOTE-abbreviation+++ "#'")
+    (+++SHARP-COLON-abbreviation+++ "#:")
+    (+++SHARP-DOT-abbreviation+++ "#.")
+    (+++SHARP-PLUS-abbreviation+++ "#+")
+    (+++SHARP-P-abbreviation+++ "#P")
+    (+++CL-QUASIQUOTE-abbreviation+++ "`")
+    (+++CL-UNQUOTE-abbreviation+++ ",")
+    (+++CL-UNQUOTE-SPLICING-abbreviation+++ ",@")))
+
+(define (parse-hash c port) #f)
+
+(define (nest-comment fake-port)
+  (let ((c (read-char fake-port)))
+    (cond ((eof-object? c) (values))
+          ((char=? c #\|)
+           (let ((c2 (peek-char fake-port)))
+             (if (char=? c2 #\#)
+               (begin (read-char fake-port) (values))
+               (nest-comment fake-port))))
+          ((and hash-pipe-comment-nests? (char=? c #\#))
+           (let ((c2 (peek-char fake-port)))
+             (if (char=? c2 #\|)
+               (begin
+                 (read-char fake-port)
+                 (nest-comment fake-port))
+               (values))
+             (nest-comment fake-port)))
+          (#t (nest-comment fake-port)))))
+
+(define digits
+  '(#\0 #\1 #\2 #\3 #\4 #\5 #\6 #\7 #\8 #\9))
+
+(define (process-period port)
+  (read-char port)
+  (let ((c (peek-char port)))
+    (cond ((eof-object? c) period-symbol)
+          ((memv c '(#\' #\` #\, #\#)) period-symbol)
+          ((memv c digits)
+           (let ((num (read-number port (list #\.))))
+             (if num
+               num
+               (read-error "period digit must be a number"))))
+          (#t
+           (string->symbol
+             (fold-case-maybe
+               port
+               (list->string
+                 (cons #\. (read-until-delim port my-delimiters)))))))))
+
+(define (read-inline-hex-escape port)
+  (let* ((chars (read-until-delim
+                  port
+                  (append my-delimiters '(#\;))))
+         (n (string->number (list->string chars) 16)))
+    (if (eqv? #\; (peek-char port))
+      (read-char port)
+      (read-error "Unfinished inline hex escape"))
+    (if (not n) (read-error "Bad inline hex escape"))
+    (integer->char n)))
+
+(define (read-symbol-elements port)
+  (let ((c (read-char port)))
+    (cond ((eof-object? c) '())
+          ((eqv? c #\|) '())
+          ((eqv? c #\\)
+           (let ((c2 (read-char port)))
+             (cond ((eof-object? c) '())
+                   ((eqv? c2 #\|)
+                    (cons #\| (read-symbol-elements port)))
+                   ((eqv? c2 #\\)
+                    (cons #\\ (read-symbol-elements port)))
+                   ((eqv? c2 #\a)
+                    (cons (integer->char 7)
+                          (read-symbol-elements port)))
+                   ((eqv? c2 #\b)
+                    (cons (integer->char 8)
+                          (read-symbol-elements port)))
+                   ((eqv? c2 #\t)
+                    (cons (integer->char 9)
+                          (read-symbol-elements port)))
+                   ((eqv? c2 #\n)
+                    (cons (integer->char 10)
+                          (read-symbol-elements port)))
+                   ((eqv? c2 #\r)
+                    (cons (integer->char 13)
+                          (read-symbol-elements port)))
+                   ((eqv? c2 #\f)
+                    (cons (integer->char 12)
+                          (read-symbol-elements port)))
+                   ((eqv? c2 #\v)
+                    (cons (integer->char 11)
+                          (read-symbol-elements port)))
+                   ((eqv? c2 #\x)
+                    (cons (read-inline-hex-escape port)
+                          (read-symbol-elements port)))
+                   (#t (cons c2 (read-symbol-elements port))))))
+          (#t (cons c (read-symbol-elements port))))))
+
+
+; Extension: When reading |...|, *include* the bars in the symbol, so that
+; when we print it out later we know that there were bars there originally.
+(define (read-literal-symbol port)
+  (let ((c (read-char port)))
+    (cond ((eof-object? c)
+           (read-error "EOF inside literal symbol"))
+          ((eqv? c #\|) '(#\|))
+          ((eqv? c #\\)
+           (let ((c2 (read-char port)))
+             (if (eof-object? c)
+               (read-error "EOF after \\ in literal symbol")
+               (cons c (cons c2 (read-literal-symbol port))))))
+          (#t (cons c (read-literal-symbol port))))))
+
+; Read |...| symbol (like Common Lisp)
+; This is present in R7RS draft 9.
+(define (get-barred-symbol port)
+  (read-char port)
+  (string->symbol
+    (list->string
+      (if literal-barred-symbol
+        (cons #\| (read-literal-symbol port))
+        (read-symbol-elements port)))))
+
+(define (read-cl-string-as-list port)
+  (let ((c (read-char port)))
+    (cond ((eof-object? c)
+           (read-error "EOF inside string literal"))
+          ((eqv? c #\") '())
+          ((eqv? c #\\)
+           (let ((c2 (read-char port)))
+             (cond ((eof-object? c2)
+                    (read-error "EOF after \\ in string"))
+                   ((eqv? c2 #\t)
+                    (cons (integer->char 9)
+                          (read-cl-string-as-list port)))
+                   ((eqv? c2 #\n)
+                    (cons (integer->char 10)
+                          (read-cl-string-as-list port)))
+                   ((eqv? c2 #\r)
+                    (cons (integer->char 13)
+                          (read-cl-string-as-list port)))
+                   (#t (cons c2 (read-cl-string-as-list port))))))
+          (#t (cons c (read-cl-string-as-list port))))))
+
+(define (read-cl-string port)
+  (read-char port)
+  (list->string (read-cl-string-as-list port)))
+
+(define default-scheme-read read)
+
+(define (my-read port)
+  (consume-whitespace port)
+  (let* ((pos (get-sourceinfo port))
+         (c (peek-char port)))
+    (cond ((eof-object? c) c)
+          ((char=? c #\")
+           (if common-lisp
+             (read-cl-string port)
+             (default-scheme-read port)))
+          (#t
+           (attach-sourceinfo
+             pos
+             (cond ((char=? c #\#)
+                    (read-char port)
+                    (let ((rv (process-sharp port)))
+                      (cond ((eq? (car rv) 'scomment) (my-read port))
+                            ((eq? (car rv) 'normal) (cadr rv))
+                            ((eq? (car rv) 'abbrev)
+                             (list (cadr rv) (my-read port)))
+                            (#t (read-error "Unknown # sequence")))))
+                   ((char=? c #\.) (process-period port))
+                   ((or (memv c digits)
+                        (char=? c #\+)
+                        (char=? c #\-))
+                    (let* ((maybe-number
+                             (list->string
+                               (read-until-delim port my-delimiters)))
+                           (as-number (string->number maybe-number)))
+                      (if as-number
+                        as-number
+                        (string->symbol
+                          (fold-case-maybe port maybe-number)))))
+                   ((char=? c #\')
+                    (read-char port)
+                    (list (attach-sourceinfo pos 'quote)
+                          (my-read port)))
+                   ((char=? c #\`)
+                    (read-char port)
+                    (list (attach-sourceinfo
+                            pos
+                            (translate-cl 'quasiquote))
+                          (my-read port)))
+                   ((char=? c #\,)
+                    (read-char port)
+                    (cond ((char=? #\@ (peek-char port))
+                           (read-char port)
+                           (list (attach-sourceinfo
+                                   pos
+                                   (translate-cl 'unquote-splicing))
+                                 (my-read port)))
+                          (#t
+                           (list (attach-sourceinfo
+                                   pos
+                                   (translate-cl 'unquote))
+                                 (my-read port)))))
+                   ((char=? c #\()
+                    (read-char port)
+                    (my-read-delimited-list #\) port))
+                   ((char=? c #\))
+                    (read-char port)
+                    (read-error
+                      "Closing parenthesis without opening")
+                    (my-read port))
+                   ((char=? c #\[)
+                    (read-char port)
+                    (my-read-delimited-list #\] port))
+                   ((char=? c #\])
+                    (read-char port)
+                    (read-error "Closing bracket without opening"))
+                   ((char=? c #\})
+                    (read-char port)
+                    (read-error "Closing brace without opening"))
+                   ((char=? c #\|) (get-barred-symbol port))
+                   (#t
+                    (string->symbol
+                      (fold-case-maybe
+                        port
+                        (list->string
+                          (read-until-delim port my-delimiters)))))))))))
+
+(define (read_to_blank_line port)
+  (consume-to-eol port)
+  (consume-end-of-line port)
+  (let* ((c (peek-char port)))
+    (if (not (or (eof-object? c)
+                 (eqv? c carriage-return)
+                 (eqv? c linefeed)))
+      (read_to_blank_line port))))
+
+(define (my-read-top port)
+  (catch 'readable
+         (lambda () (my-read port))
+         (lambda (key . args)
+           (read_to_blank_line port)
+           (my-read-top port))))
+
+; End of our own reader implementation.
+
+(define (choose-read port)
+  (if use-builtin-reader
+    (my-read-top port)
+    (read port)))
+
+(define (cl-abbreviation? x)
+  (if (not common-lisp)
+    #f
+    (and (list2? x) (assq (car x) map-cl))))
+
+; Returns #t if x is a symbol that would typically be used in infix position.
+(define (is-infix-operator? x)
+  (cond ((not (symbol? x)) #f)
+        ((memq x special-infix-operators) #t)
+        (#t
+         (contains-only-punctuation?
+           (string->list (symbol->string x))))))
+
+; Given an indent, return the next deeper indent.
+(define (deeper indent)
+  (append indent indent-increment))
+
+; Return #t if indent's last indent was unmarked.
+; Presumes indent is long enough to be marked.
+(define (last-indent-unmarked indent)
+  (not (equal?
+         (list-tail
+           indent
+           (- (length indent)
+              (length marked-indent-increment)))
+         marked-indent-increment)))
+
+; Given an indent, return the next deeper indent, marked if appropriate.
+; "If appropriate" means it's already somewhat deep to start with,
+; and thus it'd be helpful to have the markings for the eye to follow.
+; Don't mark if the previous indent already marked its indent.
+(define (mark-deeper indent)
+  (if (and (> (length indent) min-indent-marking)
+           (last-indent-unmarked indent))
+    (append indent marked-indent-increment)
+    (append indent indent-increment)))
+
+; An x is boring if it's not a list, or it's a list with ONLY non-pair members.
+(define (boring? x)
+  (cond ((not (pair? x)) #t)
+        ((pair? (car x)) #f)
+        (#t (boring? (cdr x)))))
+
+; A list is long and boring if it's a list, its length is at least
+; the boring-length, and it's boring.
+; A long-and-boring list is almost certainly NOT a function call or a
+; body of some executable sequence - it's almost certainly a long
+; boring list of data instead. If it is, we want to display it differently.
+(define (long-and-boring? x)
+  (cond ((not (pair? x)) #f)
+        ((not (list? x)) #f)
+        ((< (length x) boring-length) #f)
+        (#t (boring? x))))
+
+; Support general-length-inner - help count length of possibly-improper list.
+(define (general-length-inner x count-so-far)
+  (cond ((null? x) count-so-far)
+        ((not (pair? x)) (+ count-so-far 1))
+        (#t
+         (general-length-inner (cdr x) (+ count-so-far 1)))))
+
+; Return length of x, which may be an improper list.
+; If improper, count the two sides as two, so "(a . b)" is length 2.
+(define (general-length x)
+  (general-length-inner x 0))
+
+; The "meta-length" is an estimate of how complicated an expression is.
+; Every list element counts as 1, and every new list also adds one
+; (because we count () as 1) recursively.
+(define (meta-length x)
+  (cond ((not (pair? x)) 1)
+        (#t
+         (+ (meta-length (car x)) (meta-length (cdr x))))))
+
+; Return true if m is "complicated" (and thus should split lines).
+; All Common Lisp "defuns" are considered complicated.
+; If an operator is one that we prefer to cuddle, and its meta-length
+; is long, then say that's complicated too.
+(define (complicated? x)
+  (cond ((eq? (car x) 'defun) #t)
+        ((memq (car x) cuddle-first-parameter)
+         (if (pair? (cdr x))
+           (> (meta-length (cddr x))
+              max-uncomplicated-meta-length)
+           #f))
+        (#t #f)))
+
+; Return #t if x should be represented using curly-infix notation {...}.
+(define (represent-as-infix? x)
+  (and (pair? x)
+       (is-infix-operator? (car x))
+       (list? x)
+       (<= (length x) 6)))
+
+(define (represent-as-inline-infix? x)
+  (and (represent-as-infix? x) (>= (length x) 3)))
+
+; Return #t if x should be represented as a brace suffix
+(define (represent-as-brace-suffix? x)
+  (and (represent-as-infix? x) (>= (length x) 2)))
+
+; Define an association list mapping the Lisp function names which have
+; abbreviations ==> the list of characters in their abbreviation
+(define abbreviations
+  '('(#\') `(#\`) ,(#\,) ,@(#\, #\@)))
+
+; return #t if we should as a traditional abbreviation, e.g., '
+(define (represent-as-abbreviation? x)
+  (and (pair? x)
+       (assq (car x) abbreviations)
+       (pair? (cdr x))
+       (null? (cddr x))))
+
+; Return list x's *contents* represented as a list of characters.
+; Each one must use neoteric-expressions, space-separated;
+; it will be surrounded by (...) so no indentation processing is relevant.
+(define (unit-list x)
+  (cond ((null? x) '())
+        ((pair? x)
+         (if (null? (cdr x))
+           (unit (car x))
+           (append
+             (unit (car x))
+             '(#\space)
+             (unit-list (cdr x)))))
+        (#t (append LIST.SP (unit x)))))
+
+; Return tail of an infix expression, as list of chars
+; The "op" is the infix operator represented as a list of chars.
+(define (infix-tail op x)
+  (cond ((null? x) LISTRBRACE)
+        ((pair? x)
+         (append
+           '(#\space)
+           op
+           '(#\space)
+           (unit (car x))
+           (infix-tail op (cdr x))))
+        (#t (append LISTSP.SP (unit x) LISTRBRACE))))
+
+; Return "x" as a list of characters, surrounded by {...}, for use as f{...}.
+(define (as-brace-suffix x)
+  (if (< (general-length x) 3)
+    (append LISTLBRACE (unit-list x) LISTRBRACE)
+    (append
+      LISTLBRACE
+      (unit (cadr x))
+      (infix-tail (unit (car x)) (cddr x)))))
+
+; Given list of characters, return the characters that would REPRESENT
+; those characters inside a string AFTER the initial double-quote,
+; then return the double-quote.  This translates newline to \n, etc.
+; We'll translate carriage-return to \r and tab to \t; these aren't in
+; R5RS, but failing to translate them can cause other trouble, and they
+; *are* in R6RS.
+(define (unit-string-tail x)
+  (if (null? x)
+    '(#\")
+    (append
+      (let ((c (car x)))
+        (cond ((eq? c #\\) '(#\\ #\\))
+              ((eq? c #\") '(#\\ #\"))
+              ((eq? c #\newline) '(#\\ #\n))
+              ((eq? c carriage-return) '(#\r #\n))
+              ((eq? c tab) '(#\\ #\t))
+              (#t (list (car x)))))
+      (unit-string-tail (cdr x)))))
+
+; Return x represented as a neoteric-expression unit,
+; as a list of characters that are part of one line.
+; Indentation processing *may* be active, but the character sequence
+; returned must not depend on that.
+; This is widely-used. If speed's a problem, memoize this;
+; you can erase the memoized information once display-sweeten-format() has
+; displayed the result.
+(define (unit x)
+  (cond ((null? x) (string->list "()"))
+        ((number? x) (string->list (number->string x)))
+        ((boolean? x) (if x '(#\# #\t) '(#\# #\f)))
+        ((string? x)
+         (append
+           '(#\")
+           (unit-string-tail (string->list x))))
+        ((cl-abbreviation? x)
+         (append
+           (string->list (cadr (assq (car x) map-cl)))
+           (unit (cadr x))))
+        ((and common-lisp (symbol? x) (assq x map-cl))
+         (append
+           '(#\space #\. #\space)
+           (string->list (cadr (assq x map-cl)))))
+        ((symbol? x) (string->list (symbol->string x)))
+        ((pair? x)
+         (cond ((represent-as-abbreviation? x)
+                (append
+                  (cadr (assq (car x) abbreviations))
+                  (unit (cadr x))))
+               ((long-and-boring? x)
+                (append LISTLP (unit-list x) LISTRP))
+               ((symbol? (car x))
+                (cond ((represent-as-inline-infix? x)
+                       (append
+                         LISTLBRACE
+                         (unit (cadr x))
+                         (infix-tail (unit (car x)) (cddr x))))
+                      ((and (list1? (cdr x))
+                            (pair? (cadr x))
+                            (represent-as-brace-suffix? (cadr x)))
+                       (append
+                         (unit (car x))
+                         (as-brace-suffix (cadr x))))
+                      (#t
+                       (append
+                         (unit (car x))
+                         LISTLP
+                         (unit-list (cdr x))
+                         LISTRP))))
+               (#t (append LISTLP (unit-list x) LISTRP))))
+        (#t (string->list (object->string x)))))
+
+; Display a unit, but it's exposed, that is, it's outside (), [], {}.
+; Thus, we need to specially escape markers like "$".
+(define (exposed-unit x)
+  (cond ((eq? x '$) (string->list "{$}"))
+        ((eq? x '\\) (string->list "{\\\\}"))
+        ((eq? x '<*) (string->list "{<*}"))
+        ((eq? x '*>) (string->list "{*>}"))
+        ((eq? x '$$$) (string->list "{$$$}"))
+        (#t (unit x))))
+
+; Display a unit (like exposed-unit), but possibly use a collecting list.
+(define (exposed-unit-collecting x)
+  (cond ((and (list1? x) (list2? (car x)))
+         (append
+           '(#\< #\* #\space)
+           (line-in-collecting (car x))
+           '(#\space #\* #\>)))
+        ((and (list2? x)
+              (list2? (car x))
+              (list2? (cadr x)))
+         (append
+           '(#\< #\* #\space)
+           (line-in-collecting (car x))
+           '(#\space #\\ #\\ #\space)
+           (line-in-collecting (cadr x))
+           '(#\space #\* #\>)))
+        (#t (exposed-unit x))))
+
+; Return x as a unit, but always represent lists as (a b c):
+(define (unit-force-list x)
+  (if (pair? x)
+    (append LISTLP (unit-list x) LISTRP)
+    (unit x)))
+
+; Return x, the rest of the list, as a list of characters. See line().
+(define (line-tail x)
+  (cond ((null? x) '())
+        ((pair? x)
+         (append
+           '(#\space)
+           (exposed-unit (car x))
+           (line-tail (cdr x))))
+        (#t (append LISTSP.SP (exposed-unit x)))))
+
+; Return x represented as a line of space-separated neoteric-expression units,
+; as a list of characters.
+; Indentation processing *MUST* be active.
+(define (line x)
+  (cond ((not (pair? x)) (exposed-unit x))
+        ((cl-abbreviation? x) (exposed-unit x))
+        ((and (list1? x)
+              (represent-as-inline-infix? (car x)))
+         (append '(#\$ #\space) (unit (car x))))
+        ((represent-as-inline-infix? x) (unit x))
+        ((represent-as-abbreviation? x)
+         (if (multi-element-list? (cadr x))
+           (append
+             (cadr (assq (car x) abbreviations))
+             '(#\space)
+             (line (cadr x)))
+           (exposed-unit x)))
+        ((list1? x)
+         (if (symbol? (car x))
+           (append (exposed-unit (car x)) LISTLP LISTRP)
+           (append LISTLP (unit (car x)) LISTRP)))
+        (#t
+         (append
+           (exposed-unit (car x))
+           (line-tail (cdr x))))))
+
+(define (line-in-collecting x)
+  (if (and (list2? x)
+           (symbol? (car x))
+           (pair? (cadr x)))
+    (append
+      (exposed-unit (car x))
+      '(#\space #\$ #\space)
+      (line (cadr x)))
+    (line x)))
+
+; Return list "m" as a list of characters representing
+; a long and boring split list.  We'll keep track of position inside
+; this routine, since we can do that easily here.
+(define (sweeten-boring-list x first? pos next-indent)
+  (cond ((null? x) '(#\newline))
+        (first?
+         (let ((item (exposed-unit (car x))))
+           (append
+             item
+             (sweeten-boring-list
+               (cdr x)
+               #f
+               (+ pos (length item))
+               next-indent))))
+        (#t
+         (let ((item (exposed-unit (car x))))
+           (let ((item-sameline
+                   (append '(#\space) group-list '(#\space) item)))
+             (if (< (+ pos (length item-sameline)) maxwidth)
+               (append
+                 item-sameline
+                 (sweeten-boring-list
+                   (cdr x)
+                   #f
+                   (+ pos (length item-sameline))
+                   next-indent))
+               (append
+                 '(#\newline)
+                 next-indent
+                 (sweeten-boring-list
+                   x
+                   #t
+                   (length next-indent)
+                   next-indent))))))))
+
+
+; Return the string to add as indentation (empty if already indented).
+(define (getdent indent-already indent)
+  (if indent-already '() indent))
+
+; What's the number of characters consumed in the indent (and thus
+; the column position starting from 0)?
+(define (posdent indent-already indent)
+  (if indent-already
+    (length indent-already)
+    (length indent)))
+
+; Return #t if a sequence of characters (length newlen) will fit within
+; maxlen, given indent-already and indent.  Else returns #f.
+(define (fits-width? indent-already indent newlen)
+  (< (+ (posdent indent-already indent) newlen)
+     maxwidth))
+
+; Input: expression "m" with indentation string "indent".
+; Output: List of characters representing it (#\newline for new line).
+; This tail handles the body of a list (after its first entry) when
+; indentation processing is active, each of these is its own initial line.
+(define (sweeten-body m indent indent-already)
+  (cond ((null? m) '())
+        ((not (pair? m))
+         (append
+           (getdent indent-already indent)
+           '(#\. #\newline)
+           (sweeten-top m indent indent-already)))
+        (#t
+         (append
+           (sweeten-top (car m) indent indent-already)
+           (sweeten-body (cdr m) indent #f)))))
+
+; Body-like construct, but for variable lists.
+(define (sweeten-body-varlist m indent indent-already)
+  (if (or (null? m) (not (pair? m)))
+    (sweeten-body m indent indent-already)
+    (append
+      (cond ((and (list2? (car m)) (symbol? (caar m)))
+             (let* ((asline (line-in-collecting (car m)))
+                    (length-asline (length asline)))
+               (if (fits-width? indent-already indent length-asline)
+                 (append
+                   (getdent indent-already indent)
+                   asline
+                   '(#\newline))
+                 (sweeten-top (car m) indent indent-already))))
+            (#t (sweeten-top (car m) indent indent-already)))
+      (sweeten-body-varlist (cdr m) indent #f))))
+
+; Return list m represented in the typical indent style.
+(define (sweeten-top-normal-indent
+         x
+         indent
+         indent-already)
+  (if (represent-as-abbreviation? x)
+    (let* ((prefix
+             (append
+               (cadr (assq (car x) abbreviations))
+               '(#\space)))
+           (newdent
+             (append (getdent indent-already indent) prefix)))
+      (append
+        newdent
+        (sweeten-top (cadr x) indent newdent)))
+    (append
+      (sweeten-top (car x) indent indent-already)
+      (sweeten-body (cdr x) (deeper indent) #f))))
+
+; Return a list of characters representing m,
+; using multiple lines to represent m.
+; There several possible formats; we'll examine various options
+; to determine the most pleasing format.
+(define (sweeten-top-multiline m indent indent-already)
+  (if (pair? (car m))
+    (let* ((asline-car
+             (if (null? (cdr m))
+               (append '(#\$ #\space) (line (car m)))
+               (exposed-unit (car m)))))
+      (if (fits-width?
+            indent-already
+            indent
+            (length asline-car))
+        (append
+          (getdent indent-already indent)
+          asline-car
+          '(#\newline)
+          (sweeten-body (cdr m) (deeper indent) #f))
+        (append
+          (getdent indent-already indent)
+          (string->list group-string-newline)
+          (sweeten-top (car m) (deeper indent) #f)
+          (sweeten-body (cdr m) (deeper indent) #f))))
+    (cond ((long-and-boring? m)
+           (append
+             (getdent indent-already indent)
+             (string->list group-string-newline)
+             (deeper indent)
+             (sweeten-boring-list
+               m
+               #t
+               (posdent indent-already indent)
+               (deeper indent))))
+          ((and (eq? (car m) 'defun)
+                (> (general-length m) 3))
+           (let* ((asline-cuddled
+                    (append
+                      (line (list (car m) (cadr m)))
+                      '(#\space)
+                      (unit-force-list (caddr m)))))
+             (if (fits-width?
+                   indent-already
+                   indent
+                   (length asline-cuddled))
+               (append
+                 (getdent indent-already indent)
+                 asline-cuddled
+                 '(#\newline)
+                 (sweeten-body (cdddr m) (mark-deeper indent) #f))
+               (sweeten-top-normal-indent
+                 m
+                 (getdent indent-already indent)
+                 #f))))
+          ((and (memq (car m) cuddle-first-parameter)
+                (list-3-plus? m))
+           (let* ((asline-cuddled
+                    (append
+                      (exposed-unit (car m))
+                      '(#\space)
+                      (exposed-unit-collecting (cadr m))))
+                  (currentdent (getdent indent-already indent))
+                  (nextdent (deeper indent))
+                  (next2dent (deeper nextdent)))
+             (if (fits-width?
+                   indent-already
+                   indent
+                   (length asline-cuddled))
+               (append
+                 currentdent
+                 asline-cuddled
+                 '(#\newline)
+                 (if (and (memq (car m) let-likes)
+                          (symbol? (cadr m))
+                          (pair? (cddr m))
+                          (list? (caddr m)))
+                   (append
+                     nextdent
+                     '(#\\ #\\ #\newline)
+                     (sweeten-body-varlist (caddr m) next2dent #f)
+                     (sweeten-body (cdddr m) nextdent #f))
+                   (sweeten-body (cddr m) (mark-deeper indent) #f)))
+               (if (and (memq (car m) let-likes)
+                        (list? (cadr m))
+                        (not (list1? (cadr m))))
+                 (append
+                   currentdent
+                   (exposed-unit (car m))
+                   '(#\newline)
+                   nextdent
+                   '(#\\ #\\ #\newline)
+                   (sweeten-body-varlist (cadr m) next2dent #f)
+                   (sweeten-body (cddr m) nextdent #f))
+                 (sweeten-top-normal-indent
+                   m
+                   indent
+                   indent-already)))))
+          (#t
+           (sweeten-top-normal-indent
+             m
+             indent
+             indent-already)))))
+
+
+; Input: expression "m" with indentation string "indent".
+;        indent-already is #f if no indentation has already taken place;
+;        if indentation *has* taken place, it contains the string of
+;        indentation and any following characters that's occurred
+;        (so char position, etc., can be determined).
+; Output: List of characters representing it (#\newline for new line).
+; At this point, we're at the beginning of a possibly-indented
+; line with sweet-expression (indentation) processing active.
+(define (sweeten-top m indent indent-already)
+  (if (not (pair? m))
+    (append
+      (getdent indent-already indent)
+      (exposed-unit m)
+      '(#\newline))
+    (let* ((asline (line m))
+           (length-asline (length asline)))
+      (if (and (< length-asline max-unit-character-length)
+               (fits-width? indent-already indent length-asline)
+               (not (complicated? m))
+               (< (general-length m) max-unit-list-length))
+        (append
+          (getdent indent-already indent)
+          asline
+          '(#\newline))
+        (sweeten-top-multiline m indent indent-already)))))
+
+; True if at beginning of column (line), otherwise false.
+; This value is only used when we're looking for a datum to read() in.
+(define column1 #t)
+
+; Display x (a list of chars and strings), but do NOT display
+; the last end-of-line.  Because we only take generated files,
+; the end-of-line is exactly \#newline and nothing else.
+(define (display-skip-last-eol x)
+  (cond ((null? x) #t)
+        ((string? (car x))
+         (display (car x))
+         (set! column1 #f)
+         (display-skip-last-eol (cdr x)))
+        ((and (char? (car x))
+              (null? (cdr x))
+              (eq? (car x) #\newline))
+         #t)
+        ((char? (car x))
+         (write-char (car x))
+         (set! column1 #f)
+         (display-skip-last-eol (cdr x)))
+        (#t (display "BUG!!! in display-skip-last-eof!"))))
+
+; Display formatted expression "x" using indentation string "indent".
+; Do NOT display the final end-of-line, due to an interesting subtlety:
+; read() doesn't consume the end-of-line, so if we are translating
+; what read() has read in, then we need to NOT generate the last end-of-line
+; so that they will match up.
+(define (display-sweeten-format x)
+  (if (not column1)
+    (begin (newline) (set! column1 #t)))
+  (display-skip-last-eol
+    (sweeten-top x (string->list "") #f)))
+
+; Copy one line from stdin to stdout, end on EOF or end-of-line.
+; Consume the end of line.
+(define (copy-line port)
+  (let ((c (peek-char port)))
+    (cond ((eof-object? c) c)
+          ((memq c end-of-line-chars)
+           (consume-end-of-line port)
+           (newline)
+           (set! column1 #t))
+          (#t
+           (write-char (read-char port))
+           (set! column1 #f)
+           (copy-line port)))))
+
+; filter stdin to stdout, reading in traditional s-expressions and outputting
+; sweet-expressions.  Preserve the comments outside an s-expression.
+(define (sweeten-filter)
+  (if build-on-sweet (restore-traditional-read))
+  (let ((c (peek-char (current-input-port))))
+    (cond ((eof-object? c) c)
+          ((memq c end-of-line-chars)
+           (consume-end-of-line (current-input-port))
+           (newline)
+           (set! column1 #t)
+           (sweeten-filter))
+          ((char=? c #\;)
+           (copy-line (current-input-port))
+           (sweeten-filter))
+          ((or (char=? c #\space) (char=? c tab))
+           (read-char)
+           (sweeten-filter))
+          (#t
+           (let ((datum (choose-read (current-input-port))))
+             (if (eof-object? datum)
+               datum
+               (begin
+                 (display-sweeten-format datum)
+                 (sweeten-filter))))))))
+
+; You can use guile to trace, but the reader doesn't support the guile
+; extension #' yet.
+; Thus, the .sscm file cannot currently include guile trap invocations.
+; So to install traps, generate the .scm file directly with:
+;    make sweeten.scm
+; Now patch the generated sweetenv.scm (not the .sscm file) directly.
+; Change:
+;  (define build-on-sweet #t)
+; to:
+;  (define build-on-sweet #f)
+;  (use-modules (ice-9 debugging traps) (ice-9 debugging trace))
+; 
+; Then add the traps you want near the bottom, e.g.:
+;   (install-trap
+;     (make <procedure-trap>
+;           #:procedure sweeten-filter
+;           #:behaviour (list trace-trap trace-until-exit)))
+; And run:
+;    guile sweeten.scm
+
+
+(define help-text
+  "\n  sweeten [options]\n    -v, --version         Display version\n    -h, --help            Display this help\n    -b, --builtin-reader  Use special built-in reader, not guile's reader\n    -C, --common-lisp     Process Common Lisp (forces -b)\n    -n  --no-bang         Do NOT use exclamation points in indentation\n")
+
+(define (main args)
+  (let* ((option-spec
+           '((help (single-char #\h) (value #f))
+             (version (single-char #\v) (value #f))
+             (builtin-reader (single-char #\b) (value #f))
+             (common-lisp (single-char #\C) (value #f))
+             (no-bang (single-char #\n) (value #f))))
+         (options (getopt-long args option-spec))
+         (help-wanted (option-ref options 'help #f))
+         (version-wanted (option-ref options 'version #f))
+         (no-bang (option-ref options 'no-bang #f)))
+    (set! use-builtin-reader
+      (option-ref options 'builtin-reader #f))
+    (set! common-lisp
+      (option-ref options 'common-lisp #f))
+    (if common-lisp (set! use-builtin-reader #t))
+    (if no-bang
+      (set! marked-indent-increment indent-increment))
+    (if (or version-wanted help-wanted)
+      (begin
+        (if version-wanted
+          (display "sweeten version 0.9\n"))
+        (if help-wanted (display help-text)))
+      (sweeten-filter))))
+
+; Default guile stack is hideously small, fix that:
+(debug-set! stack 500000)
+
+(main (command-line))
+
+; vim: set expandtab shiftwidth=2 :
