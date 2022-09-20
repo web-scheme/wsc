@@ -1,0 +1,65 @@
+;;* Utilities for manipulating lexical environments.
+define-library (parse bindings)
+  import
+    (scheme base)
+  export
+    root-bindings
+    make-bindings
+    bind-value!
+    rebind-variable!
+    bind-syntax!
+  <* begin
+
+;; Lexical environment implementation type.
+define-record-type bindings
+  bindings.new(variables syntaxes parent)
+  bindings?
+  ;; Association list of all variable bindings.
+  variables variables:
+  ;; Association list of all syntax (macro) bindings.
+  syntaxes syntaxes:
+  ;; The parent environment.
+  parent parent:
+
+;;* Create a new, empty lexical environment with the given parent.
+;;*
+;;* Parameters:
+;;*   parent: The parent lexical environment.
+;;*
+;;* Result:
+;;*   The new child environment.
+define make-bindings(parent)
+  bindings.new('() '() parent)
+
+;;* The root (global) environment that is the ancestor of all environments.
+define root-bindings make-bindings('())
+
+;;* Create a binding to a new location, storing `value` in that location.
+;;*
+;;* Parameters:
+;;*   bindings   Lexical environment in which to create the binding.
+;;*   id         Identifier (name) for the new binding.
+;;*   value      Value to store in the location of the binding.
+define bind-value!(bindings id value)
+  error("Not yet implemented")
+
+;;* Create a binding to an existing location.
+;;*
+;;* Parameters:
+;;*   dest-bindings   Lexical environment in which to create the binding.
+;;*   dest-id         Identifier (name) for the new binding in `dest-bindings`.
+;;*   src-bindings    Lexical environment of the existing location.
+;;*   src-id          Identifier (name) bound to the existing location in `src-bindings`.
+define rebind-variable!(dest-bindings dest-id src-bindings src-id)
+  error("Not yet implemented")
+
+;;* Create a new syntax binding.
+;;*
+;;* Parameters:
+;;*   bindings      Lexical environment in which to create the binding.
+;;*   id            Identifier (name) for the new binding.
+;;*   transformer   Transformer for the syntax.
+define bind-syntax!(bindings id transformer)
+  error("Not yet implemented")
+
+*>

@@ -1,5 +1,11 @@
+#| S-lang Entrypoint.                      |
+ |                                         |
+ | Compile Scheme code into a Wasm module. |#
+#!sweet
 
-define hello()
-  display("hey there!")
+import (scheme base)
 
-hello()
+add-to-load-path (dirname (current-filename))  # NOT-R7RS
+import (parse bindings)
+
+display(root-bindings)

@@ -14,7 +14,7 @@ custom_target('s-lang',
               # List all files as input,
               # but only pass in the first one to the command.
               input: unsweetener.process('bootstrap/src/main.sscm',
-                                         'bootstrap/illusions.sscm',
+                                         'bootstrap/src/parse/bindings.sscm',
                                          preserve_path_from: meson.current_source_dir()),
               command: [guile, '-s', '@INPUT0@'],
               output: 's-lang.wasm')
