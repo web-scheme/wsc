@@ -1,6 +1,0 @@
-#!sweet
-
-define-syntax λ
-  syntax-rules ()
-    (λ parameters body ...)
-      (lambda parameters body ...)

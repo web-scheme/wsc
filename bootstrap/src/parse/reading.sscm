@@ -1,0 +1,39 @@
+;;* Utilities for manipulating lexical environments.
+(define-module (parse reading)
+  #:export (read-all-wrapped)
+  #:use-module (scheme base)
+  #:use-module (tools)
+)
+
+define-record-type wrapped-syntax
+  wrapped-syntax.new(datum filename line column mark)
+  wrapped-syntax?
+  datum datum.get
+  filename filename.get
+  line line.get
+  column column.get
+  mark mark.get
+
+;; Return fake wrapped syntax objects as a stopgap
+;; until a real parser is implemented.
+define fake-wrap(datum)
+  cond
+    eof-object?(datum)  datum  ; Terminating condition for `collect-list`.
+    pair?(datum)        wrapped-syntax.new(cons(fake-wrap(car(datum))
+                                                fake-wrap(cdr(datum)))
+                                           "TODO(stdin?)" 4 20 'mark)
+    vector?(datum)      wrapped-syntax.new(vector-map(fake-wrap datum)
+                                           "TODO(stdin?)" 4 20 'mark)
+    else                wrapped-syntax.new(datum
+                                           "TODO(stdin?)" 4 20 'mark)
+
+;;* Read Scheme data from a textual input port until EOF.
+;;*
+;;* Parameters:
+;;*   port   Textual input port to read from.
+;;*
+;;* Result:
+;;*   List of wrapped syntax objects containing the data.
+define read-all-wrapped(port)
+  collect-list((λ () fake-wrap(read(port)))
+               eof-object?)
