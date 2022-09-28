@@ -24,6 +24,6 @@ define compile!(filename in-port out-port)
   newline()
 
 ;; Good enough for now.
-define in-port open-input-file("../src/dummy.scm")
+define in-port open-input-file("../test/integration/basic/input.scm")
 compile!('() in-port current-output-port())
 close-port(in-port)

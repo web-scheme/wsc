@@ -8,15 +8,4 @@ unsweetener = generator(find_program('./bootstrap/readable/unsweeten'),
                         output: '@BASENAME@.scm',
                         arguments: ['@INPUT@'])
 
-custom_target('s-lang',
-              build_by_default: true,
-              # List all files as input but only pass the entrypoint to the command.
-              input: unsweetener.process('bootstrap/src/main.sscm',
-                                         'bootstrap/src/parse/env.sscm',
-                                         'bootstrap/src/parse/macros.sscm',
-                                         'bootstrap/src/parse/reading.sscm',
-                                         'bootstrap/src/tools.sscm',
-                                         'bootstrap/src/tools/logging.sscm',
-                                         preserve_path_from: meson.current_source_dir()),
-              command: [guile, '--r7rs', '--no-auto-compile', '-s', '@INPUT0@'],
-              output: 's-lang.wasm')
+subdir('src')  # The main build rule.

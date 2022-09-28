@@ -1,8 +1,9 @@
 # Bootstrapping WebScheme
 
-The idea is to implement the whole thing in this `bootstrap` folder,
-fork the bootstrap code into the top-level `src` folder with needed adjustments,
-and use Guile to run the `bootstrap` code to compile the `src` code.
+The idea is to implement the whole thing in the `src` folder in Guile,
+fork the bootstrap-ready Guile code into a temporary folder,
+tweak the existing `src` tree to better fit R7RS (module system),
+and use the forked Guile code to compile the refactored `src` code.
 
 ## Get Started
 
