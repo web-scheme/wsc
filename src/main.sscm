@@ -7,7 +7,7 @@ use-modules
   (parse reading) #:select (read-all-wrapped)
 
 ;;* The global lexical environment that is the ancestor of all environments.
-define root-bindings make-env('())
+define root-env make-env('())
 
 ;;* Compile Scheme code into a Wasm module.
 ;;*
@@ -20,7 +20,7 @@ define root-bindings make-env('())
 define compile!(filename in-port out-port)
   newline()
   write(map(expand-macros
-            read-all-wrapped(in-port)))
+            read-all-wrapped(in-port root-env)))
   newline()
 
 ;; Good enough for now.

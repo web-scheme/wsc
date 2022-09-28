@@ -29,19 +29,21 @@ define-record-type wrapped-syntax
 
 ;; Return fake wrapped syntax objects as a stopgap
 ;; until a real parser is implemented.
-define fake-wrap(datum)
-  define env '()
-  cond
-    eof-object?(datum)  datum  ; Terminating condition for `collect-list`.
-    pair?(datum)        wrapped-syntax:new(
-                          map-improper(fake-wrap datum)
-                          env "TODO(stdin?)" 4 20 '())
-    vector?(datum)      wrapped-syntax:new(
-                          vector-map(fake-wrap datum)
-                          env "TODO(stdin?)" 4 20 '())
-    else                wrapped-syntax:new(
-                          datum
-                          env "TODO(stdin?)" 4 20 '())
+define fake-wrap(datum env)
+  ;; Use an auxiliary function to form a closure around `env`.
+  define fake-wrap-aux(datum)
+    cond
+      eof-object?(datum)  datum  ; Terminating condition for `collect-list`.
+      pair?(datum)        wrapped-syntax:new(
+                            map-improper(fake-wrap-aux datum)
+                            env "TODO(stdin?)" 4 20 '())
+      vector?(datum)      wrapped-syntax:new(
+                            vector-map(fake-wrap-aux datum)
+                            env "TODO(stdin?)" 4 20 '())
+      else                wrapped-syntax:new(
+                            datum
+                            env "TODO(stdin?)" 4 20 '())
+  fake-wrap-aux(datum)
 
 ;;* Recursively unwrap a wrapped syntax object.
 define unwrap-syntax(syntax)
@@ -58,6 +60,6 @@ define unwrap-syntax(syntax)
 ;;*
 ;;* Result:
 ;;*   List of wrapped syntax objects containing the data.
-define read-all-wrapped(port)
-  collect-list((λ () fake-wrap(read(port)))
+define read-all-wrapped(port root-env)
+  collect-list((λ () fake-wrap(read(port) root-env))
                eof-object?)
