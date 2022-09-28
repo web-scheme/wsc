@@ -1,10 +1,12 @@
 use-modules (scheme base)
+use-modules (ice-9 match)  ; [https://srfi.schemers.org/srfi-200/srfi-200.html]
 
 add-to-load-path (dirname (current-filename))  ; Load relative modules.
 use-modules
   (parse env) #:select (make-env)
   (parse macros) #:select (expand-macros)
-  (parse reading) #:select (read-all-wrapped)
+  (parse reading) #:select (read-all-wrapped unwrap-syntax)
+  (tools) #:select (λ)
 
 ;;* The global lexical environment that is the ancestor of all environments.
 define root-env make-env('())
@@ -19,11 +21,12 @@ define root-env make-env('())
 ;;*              written in text format if the port is textual, otherwise binary.
 define compile!(filename in-port out-port)
   newline()
-  write(map(expand-macros
-            read-all-wrapped(in-port root-env)))
+  write(map((λ (datum) unwrap-syntax(expand-macros(datum)))
+            read-all-wrapped(in-port root-env filename)))
   newline()
 
 ;; Good enough for now.
-define in-port open-input-file("../test/integration/basic/input.scm")
-compile!('() in-port current-output-port())
+define filename "../test/integration/basic/input.scm"
+define in-port open-input-file(filename)
+compile!(filename in-port current-output-port())
 close-port(in-port)

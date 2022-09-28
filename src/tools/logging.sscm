@@ -9,7 +9,9 @@
   #:use-module ((parse reading) #:select (wrapped-syntax?
                                           wrapped-syntax.filename
                                           wrapped-syntax.line
-                                          wrapped-syntax.column))
+                                          wrapped-syntax.column
+                                          wrapped-syntax.prev
+                                          unwrap-syntax))
 )
 
 define log-level-fatal   0
@@ -26,23 +28,31 @@ define warning-tag "\x1b;[1;33mWARNING\x1b;[0m"  ; Bold yellow.
 define info-tag    "\x1b;[1;32m   INFO\x1b;[0m"  ; Bold green.
 define debug-tag   "\x1b;[1;36m  DEBUG\x1b;[0m"  ; Bold cyan.
 
+define log-origin(wrapped-datum out-port prefix)
+  display("          \x1b;[2m" out-port)
+  display(prefix out-port)
+  display("\x1b;[0m \x1b;[1m" out-port)
+  write(wrapped-syntax.filename(wrapped-datum) out-port)
+  display("\x1b;[0m \x1b;[2mline\x1b;[0m \x1b;[1m" out-port)
+  display(wrapped-syntax.line(wrapped-datum) out-port)
+  display("\x1b;[0m \x1b;[2mcolumn\x1b;[0m \x1b;[1m" out-port)
+  display(wrapped-syntax.column(wrapped-datum) out-port)
+  display("\x1b;[2m\x1b;[0m\n              " out-port)
+  write(unwrap-syntax(wrapped-datum) out-port)
+  newline(out-port)
+  unless null?(wrapped-syntax.prev(wrapped-datum))
+    log-origin(wrapped-syntax.prev(wrapped-datum) out-port "expanded from")
+
 define log-irritants(objs out-port)
   unless null?(objs)
     let ((next car(objs)))  ; TODO: Could this avoid introducing new scope?
       if wrapped-syntax?(next)
         begin
-          display("          \x1b;[2mfrom\x1b;[0m \x1b;[1m" out-port)
-          write(wrapped-syntax.filename(next) out-port)
-          display("\x1b;[0m \x1b;[2mline\x1b;[0m \x1b;[1m" out-port)
-          display(wrapped-syntax.line(next) out-port)
-          display("\x1b;[0m \x1b;[2mcolumn\x1b;[0m \x1b;[1m" out-port)
-          display(wrapped-syntax.column(next) out-port)
-          display("\x1b;[2m:\x1b;[0m " out-port)
-          write(unwrap-syntax(next) out-port)
+          log-origin(next out-port "from")
         begin
-          display("          \x1b;[2mirritant:\x1b;[0m " out-port)
+          display("              " out-port)
           write(next out-port)
-    newline(out-port)
+          newline(out-port)
     log-irritants(cdr(objs) out-port)
 
 define log-general(level tag msg objs)

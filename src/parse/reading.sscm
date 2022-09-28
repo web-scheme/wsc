@@ -4,6 +4,7 @@
             wrapped-syntax.datum wrapped-syntax.set-datum!
             wrapped-syntax.env wrapped-syntax.filename
             wrapped-syntax.line wrapped-syntax.column wrapped-syntax.prev
+            wrapped-identifier?
             read-all-wrapped unwrap-syntax)
   #:use-module (scheme base)
   #:use-module ((tools) #:select (λ
@@ -27,22 +28,27 @@ define-record-type wrapped-syntax
   ;;* Previous version of the wrapped object if macro expansion occurred.
   prev wrapped-syntax.prev
 
+;;* Return `#t` iff `wrapped-datum` is a wrapped syntax object containing an identifier.
+define wrapped-identifier?(wrapped-datum)
+  and wrapped-syntax?(wrapped-datum)
+      symbol?(wrapped-syntax.datum(wrapped-datum))
+
 ;; Return fake wrapped syntax objects as a stopgap
 ;; until a real parser is implemented.
-define fake-wrap(datum env)
+define fake-wrap(datum env filename)
   ;; Use an auxiliary function to form a closure around `env`.
   define fake-wrap-aux(datum)
     cond
       eof-object?(datum)  datum  ; Terminating condition for `collect-list`.
       pair?(datum)        wrapped-syntax:new(
                             map-improper(fake-wrap-aux datum)
-                            env "TODO(stdin?)" 4 20 '())
+                            env filename 4 20 '())
       vector?(datum)      wrapped-syntax:new(
                             vector-map(fake-wrap-aux datum)
-                            env "TODO(stdin?)" 4 20 '())
+                            env filename 4 20 '())
       else                wrapped-syntax:new(
                             datum
-                            env "TODO(stdin?)" 4 20 '())
+                            env filename 4 20 '())
   fake-wrap-aux(datum)
 
 ;;* Recursively unwrap a wrapped syntax object.
@@ -60,6 +66,6 @@ define unwrap-syntax(syntax)
 ;;*
 ;;* Result:
 ;;*   List of wrapped syntax objects containing the data.
-define read-all-wrapped(port root-env)
-  collect-list((λ () fake-wrap(read(port) root-env))
+define read-all-wrapped(port root-env filename)
+  collect-list((λ () fake-wrap(read(port) root-env filename))
                eof-object?)
