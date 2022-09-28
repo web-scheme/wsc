@@ -1,7 +1,8 @@
 ;;* General-purpose tools.
 (define-module (tools)
   #:export (λ
-            collect-list)
+            collect-list
+            map-improper)
   #:use-module (scheme base)
 )
 
@@ -14,8 +15,8 @@ define-syntax λ
 ;;* Build a list from a generating function without boundlessly growing the call stack.
 ;;*
 ;;* Parameters:
-;;*   next    Thunk to generate the elements.
-;;*   stop?   Predicate that takes an element returned by `next`
+;;*   next:   Thunk to generate the elements.
+;;*   stop?:  Predicate that takes an element returned by `next`
 ;;*           and decides if collection is complete.
 ;;*           The element that passes `stop?` is not included in the results.
 ;;*
@@ -32,3 +33,41 @@ define collect-list(next stop?)
         set-cdr!(penultimate ultimate)
         collect(ultimate next())
   collect(sentinel next())
+
+;;* Map the elements of a possibly-improper list.
+;;* If improper, map the final `cdr` as well.
+;;*
+;;* Parameters:
+;;*   proc:   Monoparametric function, applied elementwise.
+;;*   list1:  Source list, possibly improper.
+;;*
+;;* Result:
+;;*   Mapped list, improper iff `list1` is improper.
+define map-improper(proc list1)
+  define improper-tail '()
+  define tail-index 0
+  define next()
+    if pair?(list1)
+      let ((head car(list1))
+           (tail cdr(list1)))
+        if {pair?(tail) or null?(tail)}
+          ;; It may be a proper list.
+          begin
+            set!(list1 tail)                   ; `stop?` will fail.
+            set!(tail-index {tail-index + 1})  ; In case it turns out improper.
+            proc(head)                         ; Process regular element.
+          ;; It's an improper list.
+          ;; Careful to run `proc` in order in case of side effects.
+          let ((element proc(head)))
+            set!(list1 '())                    ; `stop?` will fail, then succeed.
+            set!(improper-tail proc(tail))     ; Deal with the improper tail later.
+            element                            ; Process last regular element as normal.
+      ;; `list1` must be null. `stop?` will succeed.
+      set!(list1 #f)
+  define stop?(ignored)
+    not(list1)
+  define most collect-list(next stop?)
+  unless null?(improper-tail)
+    ;; TODO: Avoid traversing the list twice.
+    set-cdr!(list-tail(most tail-index) improper-tail)
+  most

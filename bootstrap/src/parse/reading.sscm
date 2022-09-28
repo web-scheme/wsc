@@ -1,36 +1,60 @@
-;;* Utilities for manipulating lexical environments.
+;;* Tools for manipulating lexical environments.
 (define-module (parse reading)
-  #:export (read-all-wrapped)
+  #:export (wrapped-syntax wrapped-syntax?
+            wrapped-syntax.datum wrapped-syntax.set-datum!
+            wrapped-syntax.env wrapped-syntax.filename
+            wrapped-syntax.line wrapped-syntax.column wrapped-syntax.prev
+            read-all-wrapped unwrap-syntax)
   #:use-module (scheme base)
-  #:use-module (tools)
+  #:use-module ((tools) #:select (λ
+                                  collect-list
+                                  map-improper))
 )
 
 define-record-type wrapped-syntax
-  wrapped-syntax.new(datum filename line column mark)
+  wrapped-syntax:new(datum env filename line column prev)
   wrapped-syntax?
-  datum datum.get
-  filename filename.get
-  line line.get
-  column column.get
-  mark mark.get
+  ;;* Wrapped object.
+  datum wrapped-syntax.datum wrapped-syntax.set-datum!
+  ;;* Lexical environment in which `datum` exists.
+  env wrapped-syntax.env
+  ;;* Original file in which `datum` appeared.
+  filename wrapped-syntax.filename
+  ;;* Line number of original appearance.
+  line wrapped-syntax.line
+  ;;* Column number of original appearance.
+  column wrapped-syntax.column
+  ;;* Previous version of the wrapped object if macro expansion occurred.
+  prev wrapped-syntax.prev
 
 ;; Return fake wrapped syntax objects as a stopgap
 ;; until a real parser is implemented.
 define fake-wrap(datum)
+  define env '()
   cond
     eof-object?(datum)  datum  ; Terminating condition for `collect-list`.
-    pair?(datum)        wrapped-syntax.new(cons(fake-wrap(car(datum))
-                                                fake-wrap(cdr(datum)))
-                                           "TODO(stdin?)" 4 20 'mark)
-    vector?(datum)      wrapped-syntax.new(vector-map(fake-wrap datum)
-                                           "TODO(stdin?)" 4 20 'mark)
-    else                wrapped-syntax.new(datum
-                                           "TODO(stdin?)" 4 20 'mark)
+    pair?(datum)        wrapped-syntax:new(
+                          map-improper(fake-wrap datum)
+                          env "TODO(stdin?)" 4 20 '())
+    vector?(datum)      wrapped-syntax:new(
+                          vector-map(fake-wrap datum)
+                          env "TODO(stdin?)" 4 20 '())
+    else                wrapped-syntax:new(
+                          datum
+                          env "TODO(stdin?)" 4 20 '())
+
+;;* Recursively unwrap a wrapped syntax object.
+define unwrap-syntax(syntax)
+  define datum wrapped-syntax.datum(syntax)
+  cond
+    pair?(datum)    map-improper(unwrap-syntax datum)
+    vector?(datum)  vector-map(unwrap-syntax datum)
+    else            datum
 
 ;;* Read Scheme data from a textual input port until EOF.
 ;;*
 ;;* Parameters:
-;;*   port   Textual input port to read from.
+;;*   port:  Textual input port to read from.
 ;;*
 ;;* Result:
 ;;*   List of wrapped syntax objects containing the data.

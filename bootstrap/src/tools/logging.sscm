@@ -1,0 +1,77 @@
+;;* Leveled logging.
+(define-module (tools logging)
+  #:export (log-debug
+            log-info
+            log-warning
+            log-error
+            log-fatal)
+  #:use-module (scheme base)
+  #:use-module ((parse reading) #:select (wrapped-syntax?
+                                          wrapped-syntax.filename
+                                          wrapped-syntax.line
+                                          wrapped-syntax.column))
+)
+
+define log-level-fatal   0
+define log-level-error   1
+define log-level-warning 2
+define log-level-info    3
+define log-level-debug   4
+
+define current-log-level log-level-debug
+
+define fatal-tag   "\x1b;[1;35m  FATAL\x1b;[0m"  ; Bold magenta.
+define error-tag   "\x1b;[1;31m  ERROR\x1b;[0m"  ; Bold red.
+define warning-tag "\x1b;[1;33mWARNING\x1b;[0m"  ; Bold yellow.
+define info-tag    "\x1b;[1;32m   INFO\x1b;[0m"  ; Bold green.
+define debug-tag   "\x1b;[1;36m  DEBUG\x1b;[0m"  ; Bold cyan.
+
+define log-irritants(objs out-port)
+  unless null?(objs)
+    let ((next car(objs)))  ; TODO: Could this avoid introducing new scope?
+      if wrapped-syntax?(next)
+        begin
+          display("          \x1b;[2mfrom\x1b;[0m \x1b;[1m" out-port)
+          write(wrapped-syntax.filename(next) out-port)
+          display("\x1b;[0m \x1b;[2mline\x1b;[0m \x1b;[1m" out-port)
+          display(wrapped-syntax.line(next) out-port)
+          display("\x1b;[0m \x1b;[2mcolumn\x1b;[0m \x1b;[1m" out-port)
+          display(wrapped-syntax.column(next) out-port)
+          display("\x1b;[2m:\x1b;[0m " out-port)
+          write(unwrap-syntax(next) out-port)
+        begin
+          display("          \x1b;[2mirritant:\x1b;[0m " out-port)
+          write(next out-port)
+    newline(out-port)
+    log-irritants(cdr(objs) out-port)
+
+define log-general(level tag msg objs)
+  unless {current-log-level < level}
+    let ((out-port current-error-port()))  ; TODO: Could this avoid introducing new scope?
+      display("[" out-port)
+      display(tag out-port)
+      display("] " out-port)
+      display(msg out-port)
+      display(".\n" out-port)
+      log-irritants(objs out-port)
+
+;;* Log a debug-level message with possible irritants.
+define log-debug(msg . objs)
+  log-general(log-level-debug debug-tag msg objs)
+
+;;* Log an info-level message with possible irritants.
+define log-info(msg . objs)
+  log-general(log-level-info info-tag msg objs)
+
+;;* Log a warning-level message with possible irritants.
+define log-warning(msg . objs)
+  log-general(log-level-warning warning-tag msg objs)
+
+;;* Log an error-level message with possible irritants.
+define log-error(msg . objs)
+  log-general(log-level-error error-tag msg objs)
+
+;;* Log a fatal-level message with possible irritants and exit abnormally.
+define log-fatal(msg . objs)
+  log-general(log-level-fatal fatal-tag msg objs)
+  exit(#f)

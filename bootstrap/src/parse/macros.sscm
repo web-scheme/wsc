@@ -1,0 +1,54 @@
+;;* Macro expansion
+(define-module (parse macros)
+  #:export (expand-macros)
+  #:use-module (scheme base)
+  #:use-module (ice-9 match)  ; [https://srfi.schemers.org/srfi-200/srfi-200.html]
+  #:use-module ((parse env)     #:select (lookup-syntax))
+  #:use-module ((parse reading) #:select (wrapped-syntax
+                                          wrapped-syntax.datum
+                                          wrapped-syntax.env))
+  #:use-module ((tools)         #:select (map-improper))
+  #:use-module ((tools logging) #:select (log-debug))
+)
+
+define do-macro(wrapped-datum transformer)
+  log-debug("Expanding macro" wrapped-datum)
+  log-fatal("Not yet implemented")
+
+;;* Recursively expand all macros until no further expansion is possible.
+;;*
+;;* Parameters:
+;;*   wrapped-datum:  Piece of Scheme code to expand,
+;;*                   as a wrapped syntax object (containing the lexical environment).
+;;*
+;;* Result:
+;;*   Expanded version of `wrapped-datum`.
+define expand-macros(wrapped-datum)
+  match wrapped-datum
+    ($ wrapped-syntax (($ wrapped-syntax (? symbol? head)) . tail))
+      ;; `datum` has the form `(head . tail)` where `head` is an identifier.
+      ;; Check to see if the head is a macro keyword.
+      let ((maybe-syntax lookup-syntax(wrapped-syntax.env(wrapped-datum) head)))
+        if maybe-syntax
+          expand-macros(do-macro(wrapped-datum transformer))
+          begin
+            log-debug("No expansion for symbol" head)
+            set-cdr!(wrapped-syntax.datum(wrapped-datum)
+                     map-improper(expand-macros tail))
+            wrapped-datum
+    ($ wrapped-syntax (other-head . tail))
+      ;; `datum` is any other pair.
+      ;; Nothing to expand at this level. Recurse.
+      wrapped-syntax.set-datum!(wrapped-datum
+                                cons(expand-macros(other-head)
+                                     expand-macros(tail)))
+      wrapped-datum
+    ($ wrapped-syntax (? vector? datum))
+      ;; `datum` is any vector.
+      ;; Nothing to expand at this level. Recurse.
+      wrapped-syntax.set-datum!(wrapped-datum
+                                vector-map(expand-macros datum))
+      wrapped-datum
+    other
+      ;; `datum` is an atom. It's already fully expanded.
+      wrapped-datum

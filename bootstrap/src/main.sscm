@@ -2,23 +2,25 @@ use-modules (scheme base)
 
 add-to-load-path (dirname (current-filename))  ; Load relative modules.
 use-modules
-  (parse bindings) #:select (make-bindings)
+  (parse env) #:select (make-env)
+  (parse macros) #:select (expand-macros)
   (parse reading) #:select (read-all-wrapped)
 
 ;;* The global lexical environment that is the ancestor of all environments.
-define root-bindings make-bindings('())
+define root-bindings make-env('())
 
 ;;* Compile Scheme code into a Wasm module.
 ;;*
 ;;* Parameters:
-;;*   filename   A human-readable name for `in-port`,
+;;*   filename:  A human-readable name for `in-port`,
 ;;*              or null if reading from standard input.
-;;*   in-port    Textual input port to read Scheme code from.
-;;*   out-port   Output port to write the Wasm module to,
+;;*   in-port:   Textual input port to read Scheme code from.
+;;*   out-port:  Output port to write the Wasm module to,
 ;;*              written in text format if the port is textual, otherwise binary.
 define compile!(filename in-port out-port)
   newline()
-  write(read-all-wrapped(in-port))
+  write(map(expand-macros
+            read-all-wrapped(in-port)))
   newline()
 
 ;; Good enough for now.
