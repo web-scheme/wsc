@@ -3,13 +3,16 @@ use-modules (ice-9 match)  ; [https://srfi.schemers.org/srfi-200/srfi-200.html]
 
 add-to-load-path (dirname (current-filename))  ; Load relative modules.
 use-modules
-  (parse env) #:select (make-env)
+  (parse env) #:select (make-env bind-syntax!)
   (parse macros) #:select (expand-macros)
   (parse reading) #:select (read-all-wrapped unwrap-syntax)
   (tools) #:select (λ)
 
 ;;* The global lexical environment that is the ancestor of all environments.
 define root-env make-env('())
+
+;; This should normally be done in the (scheme base) lib.
+bind-syntax!(root-env 'define-syntax 'define-syntax)
 
 ;;* Compile Scheme code into a Wasm module.
 ;;*

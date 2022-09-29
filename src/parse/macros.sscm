@@ -3,7 +3,7 @@
   #:export (expand-macros)
   #:use-module (scheme base)
   #:use-module (ice-9 match)  ; [https://srfi.schemers.org/srfi-200/srfi-200.html]
-  #:use-module ((parse env)     #:select (lookup-syntax))
+  #:use-module ((parse env)     #:select (bind-syntax! lookup-syntax))
   #:use-module ((parse reading) #:select (wrapped-syntax.datum
                                           wrapped-syntax.set-datum!
                                           wrapped-syntax.env
@@ -12,10 +12,13 @@
   #:use-module ((tools logging) #:select (log-debug))
 )
 
-define do-macro(wrapped-datum transformer)
-  log-debug("Expanding macro" wrapped-datum)
-  log-fatal("Not yet implemented")
-  ;; TODO: Check for `define-syntax` here (`transformer` would be a built-in).
+define-record-type transformer
+  transformer:new(ellipsis literals patterns templates)
+  transformer?
+  ellipsis   transformer.ellipsis
+  literals   transformer.literals
+  patterns   transformer.patterns
+  templates  transformer.templates
 
 ;;* Recursively expand all macros until no further expansion is possible.
 ;;*
@@ -31,10 +34,27 @@ define expand-macros(wrapped-datum)
     ((? wrapped-identifier? head) . tail)
       ;; `datum` has the form `(head . tail)` where `head` is an identifier.
       ;; Check to see if the head is a macro keyword.
-      let ((maybe-transformer lookup-syntax(wrapped-syntax.env(head)
-                                            wrapped-syntax.datum(head))))
-        if maybe-transformer
-          expand-macros(do-macro(wrapped-datum maybe-transformer))
+      let* ((env           wrapped-syntax.env(wrapped-datum))
+            (maybe-syntax  lookup-syntax(env wrapped-syntax.datum(head))))
+        if maybe-syntax
+          ;; `maybe-syntax` is either a transformer object (user macro)
+          ;; or just a symbol (built-in syntax).
+          if transformer?(maybe-syntax)
+            begin
+              log-debug("Expanding macro" wrapped-datum)
+              wrapped-datum  ; TODO: Actually expand the macro.
+            if eq?(maybe-syntax 'define-syntax)
+              begin
+                log-debug("Defining macro" wrapped-datum)
+                wrapped-datum  ; TODO: Actually bind the transformer.
+              begin
+                ;; TODO: Handle scope-affecting built-in syntax like `let`.
+                ;; Don't "expand" other built-in syntax,
+                ;; but recursively try to expand their parameters.
+                if {pair?(tail) or null?(tail)}
+                  set-cdr!(datum map-improper(expand-macros tail))
+                  set-cdr!(datum expand-macros(tail))
+                wrapped-datum
           begin
             log-debug("No expansion for symbol" head)
             wrapped-syntax.set-datum!(

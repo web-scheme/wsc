@@ -131,56 +131,62 @@ define merge-bindings!(prior next)
         next
       prior
 
-;;; @param ellipsis   Ellipsis symbol, usually `...`.
-;;; @param literals   List of literal symbols in the syntax rule patterns.
-;;; @param pattern    Pattern to match.
-;;; @param expression Expression to match against.
-;;; @return A nested association list (TODO: describe better),
-;;;         or `#f` if the pattern fails to match.
+;;* Attempt to match a single syntax rule pattern.
+;;*
+;;* Parameters:
+;;*   ellipsis:    Ellipsis symbol, usually `...`.
+;;*   literals:    List of literal symbols in the syntax rule patterns.
+;;*   pattern:     Pattern to match.
+;;*   expression:  Expression to match against.
+;;*
+;;* Result:
+;;*   A nested association list (TODO: describe better),
+;;*   or `#f` if the pattern fails to match.
 define syntax-rule-match(ellipsis literals pattern expression)
-  ;; TODO: Handle ellipsis or underscore in literals.
+  ;; TODO: Handle overlap between literals, ellipsis and the underscore.
+  ;;       Currently, ellipsis takes precedence, then literals, then underscore.
+  ;; TODO: Handle `(... ...)` pattern.
   define recurse(pattern expression ellipsis-bindings)
-    if member(pattern literals)
-      if symbol=?(pattern expression)
-        make-hash-table()  ; Literals do not create bindings; return empty.
-        #f                 ; If a literal does not match, the pattern does not match.
-      if symbol?(pattern)
-        if symbol=?(pattern '_)
-          make-hash-table()                                  ; The underscore does not create bindings; return empty.
-          alist->hash-table(list(cons(pattern expression)))  ; A single pattern variable always matches.
-        if pair?(pattern)
-          if pair?(expression)
-            let ((bindings recurse(car(pattern) car(expression) '())))
-              if bindings
-                let ((pattern-tail cdr(pattern))
-                     (expression-tail cdr(expression)))
-                  if pair?(pattern-tail)
-                    if symbol=?(car(pattern-tail) ellipsis)
-                      if {length(pattern-tail) > length(expression-tail)}
-                        ;; Exhausted all possible variable (ellipsis) bindings.
-                        merge-bindings!
-                          append-bindings!
-                            ellipsis-bindings
-                            encapsulate-bindings!(bindings)
-                          recurse(cdr(pattern-tail) expression-tail '())
-                        ;; Still processing bindings for this ellipsis.
-                        recurse
-                          pattern
-                          expression-tail
-                          append-bindings!
-                            ellipsis-bindings
-                            encapsulate-bindings!(bindings)
-                      ;; Pattern is not followed by an ellipsis.
-                      merge-bindings!(bindings recurse(pattern-tail expression-tail '()))
-                    ;; Pattern is an improper list or null.
-                    merge-bindings!(bindings recurse(pattern-tail expression-tail '()))
-                ;; Short circuit when the recursion fails.
-                #f
-            if and(null?(expression)
-                   pair?(cdr(pattern))
-                   symbol=?(cadr(pattern) ellipsis))
-              recurse(cddr(pattern) expression '())
-              #f
+    if pair?(pattern)
+      if pair?(expression)
+        let ((bindings recurse(car(pattern) car(expression) '())))
+          if bindings
+            let ((pattern-tail cdr(pattern))
+                 (expression-tail cdr(expression)))
+              if pair?(pattern-tail)
+                if symbol=?(car(pattern-tail) ellipsis)
+                  if {length(pattern-tail) > length(expression-tail)}
+                    ;; Exhausted all possible variable (ellipsis) bindings.
+                    merge-bindings!
+                      append-bindings!
+                        ellipsis-bindings
+                        encapsulate-bindings!(bindings)
+                      recurse(cdr(pattern-tail) expression-tail '())
+                    ;; Still processing bindings for this ellipsis.
+                    recurse
+                      pattern
+                      expression-tail
+                      append-bindings!
+                        ellipsis-bindings
+                        encapsulate-bindings!(bindings)
+                  ;; Pattern is not followed by an ellipsis.
+                  merge-bindings!(bindings recurse(pattern-tail expression-tail '()))
+                ;; Pattern is an improper list or null.
+                merge-bindings!(bindings recurse(pattern-tail expression-tail '()))
+            #f  ; Short circuit when the recursion fails.
+        if and(null?(expression)
+               pair?(cdr(pattern))
+               symbol=?(cadr(pattern) ellipsis))
+          recurse(cddr(pattern) expression '())
+          #f
+      if member(pattern literals)
+        if eq?(pattern expression)
+          make-hash-table()  ; Literals do not create bindings; return empty.
+          #f                 ; If a literal does not match, the pattern does not match.
+        if symbol?(pattern)
+          if eq?(pattern '_)
+            make-hash-table()                                  ; Underscore does not create bindings.
+            alist->hash-table(list(cons(pattern expression)))  ; A pattern variable always matches.
           if {vector?(pattern) and vector?(expression)}
             recurse(vector->list(pattern) vector->list(expression) '())
             if equal?(pattern expression)  ; TODO: Check that `pattern` is "constant" (as in report).
