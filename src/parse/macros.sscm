@@ -1,8 +1,9 @@
-;;* Macro expansion
+;;* Macro definition and expansion
 (define-module (parse macros)
   #:export (process-all-macros)
   #:use-module (scheme base)
   #:use-module (srfi srfi-26)  ; `cut` / `cute`
+  #:use-module (srfi srfi-69)  ; Basic hash tables.
   #:use-module (ice-9 match)   ; [https://srfi.schemers.org/srfi-200/srfi-200.html]
   #:use-module ((parse env)     #:select (bind-syntax! lookup-syntax))
   #:use-module ((parse reading) #:select (wrapped-syntax
@@ -11,10 +12,10 @@
                                           wrapped-syntax.env
                                           unwrap-syntax))
   #:use-module ((tools)         #:select (map-improper))
-  #:use-module ((tools logging) #:select (log-debug log-fatal))
+  #:use-module ((tools logging) #:select (log-debug log-error log-fatal))
 )
 
-;;* Standard macros based on a `syntax-rules` transformer.
+;;* Representation of a macro transformer.
 define-record-type transformer
   transformer:new(ellipsis literals rules)
   transformer?
@@ -41,7 +42,7 @@ define unwrap-macro-rule(wrapped-rule)
       ;; TODO: Should raise syntax-error.
       log-fatal("Invalid macro definition" wrapped-datum)
 
-;;* Check for errors and define a standard macro.
+;;* Check for errors and define a macro.
 ;;*
 ;;* Parameters:
 ;;*   wrapped-datum:  Overall syntax definition code, as a [wrapped-syntax] object.
@@ -79,10 +80,117 @@ define define-macro(wrapped-datum env tail)
       log-fatal("Invalid macro definition" wrapped-datum)
   wrapped-datum
 
+define encapsulate-bindings!(bindings)
+  if not(bindings)
+    #f  ; Fail fast.
+    begin
+      hash-table-map!
+        lambda (key value) list(value)
+        bindings
+      bindings
+
+define append-bindings!(prior next)
+  if {not(prior) or not(next)}
+    #f  ; Fail fast.
+    if null?(prior)
+      next   ; When `prior` is null, treat it like an empty binding set.
+      begin
+        hash-table-for-each
+          lambda (key value)
+            hash-table-update!/default(prior key (cut append <> value) '())
+          next
+        prior
+
+define merge-bindings!(prior next)
+  if {not(prior) or not(next)}
+    #f  ; Fail fast.
+    begin
+      ;; TODO: Replace with `hash-table-union!` (SRFI 125).
+      hash-table-for-each
+        lambda (key value) hash-table-set!(prior key value)
+        next
+      prior
+
+;;* Attempt to match a single syntax rule pattern.
+;;*
+;;* Parameters:
+;;*   ellipsis:    Ellipsis symbol, usually `...`.
+;;*   literals:    List of literal symbols in the syntax rule patterns.
+;;*   pattern:     Pattern to match.
+;;*   expression:  Expression to match against.
+;;*
+;;* Result:
+;;*   A nested association list of the free-variable bindings introduced during matching,
+;;*   or `#f` if the pattern failed to match.
+define syntax-rule-match(ellipsis literals pattern expression)
+  ;; TODO: Handle overlap between literals, ellipsis and the underscore.
+  ;;       Currently, ellipsis takes precedence, then literals, then underscore.
+  ;; TODO: Handle `(... ...)` pattern.
+  define recurse(pattern expression ellipsis-bindings)
+    if pair?(pattern)
+      if pair?(expression)
+        let ((bindings recurse(car(pattern) car(expression) '())))
+          if bindings
+            let ((pattern-tail cdr(pattern))
+                 (expression-tail cdr(expression)))
+              if pair?(pattern-tail)
+                if symbol=?(car(pattern-tail) ellipsis)
+                  if {length(pattern-tail) > length(expression-tail)}
+                    ;; Exhausted all possible variable (ellipsis) bindings.
+                    merge-bindings!
+                      append-bindings!
+                        ellipsis-bindings
+                        encapsulate-bindings!(bindings)
+                      recurse(cdr(pattern-tail) expression-tail '())
+                    ;; Still processing bindings for this ellipsis.
+                    recurse
+                      pattern
+                      expression-tail
+                      append-bindings!
+                        ellipsis-bindings
+                        encapsulate-bindings!(bindings)
+                  ;; Pattern is not followed by an ellipsis.
+                  merge-bindings!(bindings recurse(pattern-tail expression-tail '()))
+                ;; Pattern is an improper list or null.
+                merge-bindings!(bindings recurse(pattern-tail expression-tail '()))
+            #f  ; Short circuit when the recursion fails.
+        if and(null?(expression)
+               pair?(cdr(pattern))
+               symbol=?(cadr(pattern) ellipsis))
+          recurse(cddr(pattern) expression '())
+          #f
+      if member(pattern literals)
+        if eq?(pattern expression)
+          make-hash-table()  ; Literals do not create bindings; return empty.
+          #f                 ; If a literal does not match, the pattern does not match.
+        if symbol?(pattern)
+          if eq?(pattern '_)
+            make-hash-table()                                  ; Underscore does not create bindings.
+            alist->hash-table(list(cons(pattern expression)))  ; A pattern variable always matches.
+          if {vector?(pattern) and vector?(expression)}
+            recurse(vector->list(pattern) vector->list(expression) '())
+            if equal?(pattern expression)  ; TODO: Check that `pattern` is "constant" (as in report).
+              make-hash-table()
+              #f
+  recurse(pattern expression '())
+
 ;; TODO: Document.
 define expand-macro(wrapped-datum transformer)
+  define datum unwrap-syntax(wrapped-datum)
+  define ellipsis transformer.ellipsis(transformer)
+  define literals transformer.literals(transformer)
+  define try-rules(rules)
+    if null?(rules)
+      begin
+        log-error("Failed to expand macro: no matching patterns" wrapped-datum)
+        wrapped-datum
+      let* ((next-rule car(rules))
+            (match-bindings syntax-rule-match(ellipsis literals car(next-rule) datum)))
+        if match-bindings
+          log-info("MATCH BINDINGS" match-bindings)
+          try-rules(cdr(rules))
   log-debug("Expanding macro" wrapped-datum)
-  wrapped-datum
+  try-rules(transformer.rules(transformer))
 
 ;;* Recursively record all macro definitions and expand all macro instances
 ;;* until no further expansion is possible.
