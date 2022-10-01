@@ -4,7 +4,6 @@
             wrapped-syntax.datum wrapped-syntax.set-datum!
             wrapped-syntax.env wrapped-syntax.filename
             wrapped-syntax.line wrapped-syntax.column wrapped-syntax.prev
-            wrapped-identifier?
             read-all-wrapped unwrap-syntax)
   #:use-module (scheme base)
   #:use-module ((tools) #:select (λ
@@ -27,11 +26,6 @@ define-record-type wrapped-syntax
   column wrapped-syntax.column
   ;;* Previous version of the wrapped object if macro expansion occurred.
   prev wrapped-syntax.prev
-
-;;* Return `#t` iff `wrapped-datum` is a wrapped syntax object containing an identifier.
-define wrapped-identifier?(wrapped-datum)
-  and wrapped-syntax?(wrapped-datum)
-      symbol?(wrapped-syntax.datum(wrapped-datum))
 
 ;; Return fake wrapped syntax objects as a stopgap
 ;; until a real parser is implemented.

@@ -1,78 +1,130 @@
 ;;* Macro expansion
 (define-module (parse macros)
-  #:export (expand-macros)
+  #:export (process-all-macros)
   #:use-module (scheme base)
-  #:use-module (ice-9 match)  ; [https://srfi.schemers.org/srfi-200/srfi-200.html]
+  #:use-module (srfi srfi-26)  ; `cut` / `cute`
+  #:use-module (ice-9 match)   ; [https://srfi.schemers.org/srfi-200/srfi-200.html]
   #:use-module ((parse env)     #:select (bind-syntax! lookup-syntax))
-  #:use-module ((parse reading) #:select (wrapped-syntax.datum
+  #:use-module ((parse reading) #:select (wrapped-syntax
+                                          wrapped-syntax.datum
                                           wrapped-syntax.set-datum!
                                           wrapped-syntax.env
-                                          wrapped-identifier?))
+                                          unwrap-syntax))
   #:use-module ((tools)         #:select (map-improper))
-  #:use-module ((tools logging) #:select (log-debug))
+  #:use-module ((tools logging) #:select (log-debug log-fatal))
 )
 
+;;* Standard macros based on a `syntax-rules` transformer.
 define-record-type transformer
-  transformer:new(ellipsis literals patterns templates)
+  transformer:new(ellipsis literals rules)
   transformer?
-  ellipsis   transformer.ellipsis
-  literals   transformer.literals
-  patterns   transformer.patterns
-  templates  transformer.templates
+  ;;* Identifier for ellipses.
+  ellipsis  transformer.ellipsis
+  ;;* List of identifiers for literals.
+  literals  transformer.literals
+  ;;* List of rules, each a pair of the form `(pattern . template)`.
+  rules     transformer.rules
 
-;;* Recursively expand all macros until no further expansion is possible.
+;;* Check for errors and simplify a single macro rule.
 ;;*
 ;;* Parameters:
-;;*   wrapped-datum:  Piece of Scheme code to expand,
-;;*                   as a wrapped syntax object (containing the lexical environment).
+;;*   wrapped-rule:  A single syntax rule, as a [wrapped-syntax] object.
+;;*
+;;* Result:
+;;*   The same rule recursively unwrapped and converted from a doubleton list to a pair.
+define unwrap-macro-rule(wrapped-rule)
+  match wrapped-rule
+    ($ wrapped-syntax (wrapped-pattern wrapped-template))
+      cons(unwrap-syntax(wrapped-pattern)
+           unwrap-syntax(wrapped-template))
+    _
+      ;; TODO: Should raise syntax-error.
+      log-fatal("Invalid macro definition" wrapped-datum)
+
+;;* Check for errors and define a standard macro.
+;;*
+;;* Parameters:
+;;*   wrapped-datum:  Overall syntax definition code, as a [wrapped-syntax] object.
+;;*   env:            Environment to define the macro in.
+;;*   tail:           Tail of [wrapped-syntax] objects following `define-syntax`.
+;;*
+;;* Result:
+;;*   The same rule recursively unwrapped and converted from a doubleton list to a pair.
+define define-macro(wrapped-datum env tail)
+  log-debug("Defining macro" wrapped-datum)
+  match tail
+    (($ wrapped-syntax (? symbol? name))
+     ($ wrapped-syntax
+       (($ wrapped-syntax (? (cut eq? <> 'syntax-rules)))
+        ($ wrapped-syntax (($ wrapped-syntax (? symbol? literals)) ...))
+        wrapped-rules ...)))
+      bind-syntax!(env name
+                   transformer:new('...
+                                   literals
+                                   map(unwrap-macro-rule
+                                       wrapped-rules)))
+    (($ wrapped-syntax (? symbol? name))
+     ($ wrapped-syntax
+       (($ wrapped-syntax (? (cut eq? <> 'syntax-rules)))
+        ($ wrapped-syntax (? symbol? ellipsis))
+        ($ wrapped-syntax (($ wrapped-syntax (? symbol? literals)) ...))
+        wrapped-rules ...)))
+      bind-syntax!(env name
+                   transformer:new(ellipsis
+                                   literals
+                                   map(unwrap-macro-rule
+                                       wrapped-rules)))
+    _
+      ;; TODO: Should raise syntax-error.
+      log-fatal("Invalid macro definition" wrapped-datum)
+  wrapped-datum
+
+;; TODO: Document.
+define expand-macro(wrapped-datum transformer)
+  log-debug("Expanding macro" wrapped-datum)
+  wrapped-datum
+
+;;* Recursively record all macro definitions and expand all macro instances
+;;* until no further expansion is possible.
+;;*
+;;* Parameters:
+;;*   wrapped-datum:  [wrapped-syntax] representing the Scheme code to expand.
 ;;*
 ;;* Result:
 ;;*   Expanded version of `wrapped-datum`.
-define expand-macros(wrapped-datum)
+define process-all-macros(wrapped-datum)
   define datum wrapped-syntax.datum(wrapped-datum)
   match datum
-    ((? wrapped-identifier? head) . tail)
-      ;; `datum` has the form `(head . tail)` where `head` is an identifier.
-      ;; Check to see if the head is a macro keyword.
+    (($ wrapped-syntax (? symbol? name)) . tail)
+      ;; `datum` has the unwrapped form `(name . tail)` where `name` is an identifier.
+      ;; Check to see if the `name` is a macro keyword.
       let* ((env           wrapped-syntax.env(wrapped-datum))
-            (maybe-syntax  lookup-syntax(env wrapped-syntax.datum(head))))
-        if maybe-syntax
-          ;; `maybe-syntax` is either a transformer object (user macro)
-          ;; or just a symbol (built-in syntax).
-          if transformer?(maybe-syntax)
+            (maybe-syntax  lookup-syntax(env name)))
+        ;; `maybe-syntax` is either a [transformer] object (user macro),
+        ;; a symbol (built-in syntax), or `#f` (not syntax but function invocation).
+        if transformer?(maybe-syntax)
+          expand-macro(wrapped-datum maybe-syntax)
+          if eq?(maybe-syntax 'define-syntax)
+            define-macro(wrapped-datum env tail)
             begin
-              log-debug("Expanding macro" wrapped-datum)
-              wrapped-datum  ; TODO: Actually expand the macro.
-            if eq?(maybe-syntax 'define-syntax)
-              begin
-                log-debug("Defining macro" wrapped-datum)
-                wrapped-datum  ; TODO: Actually bind the transformer.
-              begin
-                ;; TODO: Handle scope-affecting built-in syntax like `let`.
-                ;; Don't "expand" other built-in syntax,
-                ;; but recursively try to expand their parameters.
-                if {pair?(tail) or null?(tail)}
-                  set-cdr!(datum map-improper(expand-macros tail))
-                  set-cdr!(datum expand-macros(tail))
-                wrapped-datum
-          begin
-            log-debug("No expansion for symbol" head)
-            wrapped-syntax.set-datum!(
+              ;; Don't "expand" normal function calls or built-in syntax besides `define-syntax`,
+              ;; but recursively try to expand their parameters.
+              if {pair?(tail) or null?(tail)}
+                set-cdr!(datum map-improper(process-all-macros tail))
+                set-cdr!(datum process-all-macros(tail))
               wrapped-datum
-              map-improper(expand-macros datum))
-            wrapped-datum
     (? pair?)
       ;; `datum` is any other pair.
       ;; Nothing to expand at this level. Recurse.
       wrapped-syntax.set-datum!(wrapped-datum
-                                map-improper(expand-macros datum))
+                                map-improper(process-all-macros datum))
       wrapped-datum
     (? vector?)
       ;; `datum` is any vector.
       ;; Nothing to expand at this level. Recurse.
       wrapped-syntax.set-datum!(wrapped-datum
-                                vector-map(expand-macros datum))
+                                vector-map(process-all-macros datum))
       wrapped-datum
-    other
+    _
       ;; `datum` is an atom. It's already fully expanded.
       wrapped-datum
