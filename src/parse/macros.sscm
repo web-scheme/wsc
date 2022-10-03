@@ -10,8 +10,9 @@
                                           wrapped-syntax.datum
                                           wrapped-syntax.set-datum!
                                           wrapped-syntax.env
-                                          unwrap-syntax))
-  #:use-module ((tools)         #:select (map-improper))
+                                          unwrap-syntax
+                                          fake-wrap))
+  #:use-module ((tools)         #:select (λ map-improper))
   #:use-module ((tools logging) #:select (log-debug log-error log-fatal))
 )
 
@@ -80,12 +81,36 @@ define define-macro(wrapped-datum env tail)
       log-fatal("Invalid macro definition" wrapped-datum)
   wrapped-datum
 
+;; This should all be defined in SRFI 125:
+define hash-table-empty?(hash-table)
+  {hash-table-size(hash-table) = 0}
+define hash-table-contains? hash-table-exists?
+define hash-table-for-each(proc hash-table)
+  hash-table-walk(hash-table proc)
+define hash-table-map!(proc hash-table)
+  define aux(keys)
+    unless null?(keys)
+      let ((key car(keys)))
+        hash-table-update!(hash-table key (cut proc key <>))
+        aux(cdr(keys))
+  aux(hash-table-keys(hash-table))
+define hash-table-copy(hash-table . mutable?)
+  alist->hash-table(hash-table->alist(hash-table))
+define hash-table-prune!(proc hash-table)
+  define aux(keys)
+    unless null?(keys)
+      let ((key car(keys)))
+        if proc(key hash-table-ref(hash-table key))
+          hash-table-delete!(hash-table key)
+        aux(cdr(keys))
+  aux(hash-table-keys(hash-table))
+
 define encapsulate-bindings!(bindings)
   if not(bindings)
     #f  ; Fail fast.
     begin
       hash-table-map!
-        lambda (key value) list(value)
+        (λ (key value) list(value))
         bindings
       bindings
 
@@ -96,7 +121,7 @@ define append-bindings!(prior next)
       next   ; When `prior` is null, treat it like an empty binding set.
       begin
         hash-table-for-each
-          lambda (key value)
+          λ (key value)
             hash-table-update!/default(prior key (cut append <> value) '())
           next
         prior
@@ -107,7 +132,7 @@ define merge-bindings!(prior next)
     begin
       ;; TODO: Replace with `hash-table-union!` (SRFI 125).
       hash-table-for-each
-        lambda (key value) hash-table-set!(prior key value)
+        (λ (key value) hash-table-set!(prior key value))
         next
       prior
 
@@ -134,7 +159,7 @@ define syntax-rule-match(ellipsis literals pattern expression)
             let ((pattern-tail cdr(pattern))
                  (expression-tail cdr(expression)))
               if pair?(pattern-tail)
-                if symbol=?(car(pattern-tail) ellipsis)
+                if eq?(car(pattern-tail) ellipsis)
                   if {length(pattern-tail) > length(expression-tail)}
                     ;; Exhausted all possible variable (ellipsis) bindings.
                     merge-bindings!
@@ -156,10 +181,10 @@ define syntax-rule-match(ellipsis literals pattern expression)
             #f  ; Short circuit when the recursion fails.
         if and(null?(expression)
                pair?(cdr(pattern))
-               symbol=?(cadr(pattern) ellipsis))
+               eq?(cadr(pattern) ellipsis))
           recurse(cddr(pattern) expression '())
           #f
-      if member(pattern literals)
+      if memq(pattern literals)  ; TODO: Should this be `member` instead of `memq`?
         if eq?(pattern expression)
           make-hash-table()  ; Literals do not create bindings; return empty.
           #f                 ; If a literal does not match, the pattern does not match.
@@ -172,7 +197,108 @@ define syntax-rule-match(ellipsis literals pattern expression)
             if equal?(pattern expression)  ; TODO: Check that `pattern` is "constant" (as in report).
               make-hash-table()
               #f
-  recurse(pattern expression '())
+  ;; Assume that the pattern and expression are both lists with the same `car`
+  ;; (the macro keyword).
+  recurse(cdr(pattern) cdr(expression) '())
+
+;;* Extract the names of all macro free-variables appearing in `template`.
+;;*
+;;* Parameters:
+;;*   template:  Syntax rule template.
+;;*   bindings:  Hash map of identifiers to bound data, as returned by [syntax-rule-match].
+;;*
+;;* Result:
+;;*   List of identifiers in `bindings` that appear in `template`,
+;;*   each appearing in the result as many times as in `template`.
+define extract-variables(template bindings)
+  define aux(template variables)
+    if pair?(template)
+      aux(cdr(template) aux(car(template) variables))
+      if vector?(template)
+        aux(vector->list(template) variables)
+        if hash-table-contains?(bindings template)
+          cons(template variables)
+          variables
+  aux(template '())
+
+;;* Remove the first repeated value from the binding for each key.
+;;* It's an error if any of the bindings for `keys` are not repeated.
+;;*
+;;* Parameters:
+;;*   bindings:  Hash map of identifiers to bound data, as returned by [syntax-rule-match].
+;;*   keys:      List of identifiers, as returned by [extract-variables].
+;;*
+;;* Result:
+;;*   The "stripped" bindings, which are non-repeated.
+define strip-repeat-bindings!(bindings keys)
+  define aux(keys next-strip)
+    if null?(keys)
+      next-strip
+      let* ((key car(keys))
+            (value hash-table-ref/default(bindings key '())))
+        if list?(value)
+          if null?(value)
+            #f  ; Ellipsis exhausted.
+            begin
+              hash-table-set!(next-strip key car(value))
+              hash-table-set!(bindings key cdr(value))
+              aux(cdr(keys) next-strip)
+          begin
+            log-error("Expected key to be repeated but wasn't")
+            raise "Expected key to be repeated but wasn't"  ; TODO: Clean up error handling.
+  if null?(keys)
+    #f  ; Why is this necessary to handle unused repeated variables?
+    aux(keys make-hash-table())
+
+;;* Put back the unused repeated values previously removed by [strip-repeat-bindings!].
+;;* They may be used in a proceeding binding.
+define unstrip-leftovers!(bindings strip)
+  hash-table-for-each
+    λ (key value)
+      hash-table-update!/default(bindings key (cut cons value <>) '())
+    strip
+  bindings
+
+;;* Expand a matched template with the given bindings.
+;;*
+;;* Parameters:
+;;*   ellipsis:  Ellipsis symbol, usually `...`.
+;;*   template:  Syntax rule template that matched.
+;;*   bindings:  Hash map of identifiers to bound data, as returned by [syntax-rule-match].
+;;*
+;;* Result:
+;;*   The newly expanded datum, as a [wrapped-syntax] object.
+define syntax-rule-expand(ellipsis template bindings)
+  ;; HF for easier recursion:
+  define aux(template bindings)
+    if hash-table-contains?(bindings template)
+      ;; The template is just a bound variable identifer.
+      let ((value hash-table-ref(bindings template)))
+        hash-table-delete!(bindings template)
+        value
+      if pair?(template)
+        let ((template-head car(template))
+             (template-tail cdr(template)))
+          if {pair?(template-tail) and eq?(car(template-tail) ellipsis)}
+            let ((sub-bindings
+                  strip-repeat-bindings!(bindings extract-variables(template-head bindings))))
+              if sub-bindings
+                ;; Yes more repeat bindings.
+                begin
+                  cons(aux(template-head sub-bindings)
+                       aux(template unstrip-leftovers!(bindings sub-bindings)))
+                ;; No more repeat bindings to apply; the ellipsis is exhausted.
+                begin
+                  hash-table-prune!
+                    (λ (key value) null?(value))
+                    bindings
+                  aux(cdr(template-tail) bindings)
+            ;; Non-repeated pattern.
+            cons(aux(car(template) bindings) aux(cdr(template) bindings))
+        if vector?(template)
+          list->vector(aux(vector->list(template) bindings))
+          template
+  aux(template bindings)
 
 ;; TODO: Document.
 define expand-macro(wrapped-datum transformer)
@@ -187,7 +313,13 @@ define expand-macro(wrapped-datum transformer)
       let* ((next-rule car(rules))
             (match-bindings syntax-rule-match(ellipsis literals car(next-rule) datum)))
         if match-bindings
-          log-info("MATCH BINDINGS" match-bindings)
+          ;; TODO: Process macros as real wrapped syntax,
+          ;;       instead of just fake-wrapping the expanded datum here.
+          let ((expanded fake-wrap(syntax-rule-expand(ellipsis cdr(next-rule) match-bindings)
+                                   '()
+                                   "<expanded>")))
+            log-debug("Macro expanded." expanded)
+            expanded
           try-rules(cdr(rules))
   log-debug("Expanding macro" wrapped-datum)
   try-rules(transformer.rules(transformer))

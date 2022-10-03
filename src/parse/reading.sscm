@@ -4,7 +4,7 @@
             wrapped-syntax.datum wrapped-syntax.set-datum!
             wrapped-syntax.env wrapped-syntax.filename
             wrapped-syntax.line wrapped-syntax.column wrapped-syntax.prev
-            read-all-wrapped unwrap-syntax)
+            read-all-wrapped unwrap-syntax fake-wrap)
   #:use-module (scheme base)
   #:use-module ((tools) #:select (λ
                                   collect-list
