@@ -318,7 +318,7 @@ define expand-macro(wrapped-datum transformer)
           let ((expanded fake-wrap(syntax-rule-expand(ellipsis cdr(next-rule) match-bindings)
                                    '()
                                    "<expanded>")))
-            log-debug("Macro expanded." expanded)
+            log-debug("Macro expanded" expanded)
             expanded
           try-rules(cdr(rules))
   log-debug("Expanding macro" wrapped-datum)

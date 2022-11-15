@@ -1,7 +1,9 @@
 use-modules (scheme base)
 use-modules (ice-9 match)  ; [https://srfi.schemers.org/srfi-200/srfi-200.html]
 
-add-to-load-path (dirname (current-filename))  ; Load relative modules.
+;; Load relative modules.
+add-to-load-path (dirname (current-filename))
+
 use-modules
   (parse env) #:select (make-env bind-syntax!)
   (parse macros) #:select (process-all-macros)

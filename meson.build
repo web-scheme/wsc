@@ -8,4 +8,5 @@ unsweetener = generator(find_program('./bootstrap/readable/unsweeten'),
                         output: '@BASENAME@.scm',
                         arguments: ['@INPUT@'])
 
-subdir('src')  # The main build rule.
+subdir('src')
+subdir('test')

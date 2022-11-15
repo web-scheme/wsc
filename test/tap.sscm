@@ -1,0 +1,46 @@
+;;* Test Anything Protocol.
+(define-module (tap)
+  #:export (test test-number assert)
+  #:use-module (scheme base)
+)
+
+;;* The total number of tests run so far.
+define test-number 0
+
+;;* Print a test point result.
+define display-test-point(status description)
+  display(status)
+  display(" ")
+  display(test-number)
+  display(" - ")
+  display(description)
+  newline()
+  
+;;* Run a single test point, passing a string description and test body.
+define-syntax test
+  syntax-rules ()
+    (test description body ...)
+      call/cc
+        lambda (continue)
+          with-exception-handler
+            lambda (e)
+              set!(test-number {test-number + 1})
+              display-test-point("not ok" description)
+              when error-object?(e)
+                display("  ---\n  message: ")
+                write(error-object-message(e))
+                display("\n  ...\n")
+              continue('())
+            lambda ()
+              body \\ ...
+              set!(test-number {test-number + 1})
+              display-test-point("ok" description)
+
+;;* Assert that a predicate is true.
+;;*
+;;* Parameters:
+;;*   condition:     The predicate.
+;;*   fail-message:  Error message on failure.
+define assert(condition fail-message)
+  unless condition
+    error(fail-message)

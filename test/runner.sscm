@@ -1,0 +1,26 @@
+;;* Test runner: set up the environment and load each file.
+use-modules (scheme base)
+
+;; Load relative modules.
+add-to-load-path
+  dirname(current-filename())
+;; Also load main source modules (hacky):
+;; assume that `(current-filename)` ends with `/test/<target>.p/runner.scm`.
+add-to-load-path
+  string-append
+    dirname(dirname(dirname(current-filename())))
+    "/src/s-lang.wasm.p"
+
+use-modules ((tap) #:select (test-number))
+
+;; TAP version header; always required.
+display("TAP version 14\n")
+
+;; Each individial test file should use the `(tap)` library
+;; to print according to the TAP spec.
+for-each(load cdr(command-line()))
+
+;; TAP plan footer; always required.
+display("1..")
+display(test-number)
+newline()

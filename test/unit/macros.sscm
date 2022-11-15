@@ -1,0 +1,47 @@
+;;* Unit tests for macro definition and expansion.
+
+use-modules
+  (parse env) #:select (make-env bind-syntax!)
+  (parse macros) #:select (process-all-macros)
+  (parse reading) #:select (wrapped-syntax:new wrapped-syntax? unwrap-syntax)
+  (tools) #:select (λ map-improper)
+  (tap) #:select (test assert)
+
+;; TODO: Come up with a better way to set up state.
+define fake-env make-env('())
+bind-syntax!(fake-env 'define-syntax 'define-syntax)
+
+;; TODO: Refactor this into a testing utility.
+;;* Return fake wrapped syntax objects for testing.
+define fake-wrap(datum)
+  cond
+    pair?(datum)        wrapped-syntax:new(
+                          map-improper(fake-wrap datum)
+                          fake-env "nom de fichier" 4 20 '())
+    vector?(datum)      wrapped-syntax:new(
+                          vector-map(fake-wrap datum)
+                          fake-env "nom de fichier" 4 20 '())
+    else                wrapped-syntax:new(
+                          datum
+                          fake-env "nom de fichier" 4 20 '())
+
+test "A basic macro works."
+  define macro-definition
+    process-all-macros(
+      fake-wrap(
+        '(define-syntax derspler
+           (syntax-rules (fer sher)
+             ((derspler obj port ...)
+              (display obj port ...))))))
+;;
+  define macro-expansion
+    process-all-macros(
+      fake-wrap(
+        '(derspler x)))
+;;
+  assert
+    wrapped-syntax?(macro-expansion)
+    "Expanded macro is not wrapped."
+  assert
+    equal?(unwrap-syntax(macro-expansion) '(display x))
+    "Expanded macro incorrect."

@@ -1,6 +1,6 @@
 ;;* Tools for manipulating lexical environments.
 (define-module (parse reading)
-  #:export (wrapped-syntax wrapped-syntax?
+  #:export (wrapped-syntax wrapped-syntax:new wrapped-syntax?
             wrapped-syntax.datum wrapped-syntax.set-datum!
             wrapped-syntax.env wrapped-syntax.filename
             wrapped-syntax.line wrapped-syntax.column wrapped-syntax.prev
@@ -30,7 +30,7 @@ define-record-type wrapped-syntax
 ;; Return fake wrapped syntax objects as a stopgap
 ;; until a real parser is implemented.
 define fake-wrap(datum env filename)
-  ;; Use an auxiliary function to form a closure around `env`.
+  ;; Use an auxiliary function to form a closure around `env` and `filename`.
   define fake-wrap-aux(datum)
     cond
       eof-object?(datum)  datum  ; Terminating condition for `collect-list`.
