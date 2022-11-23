@@ -27,6 +27,8 @@ Some wrappers are used for bootstrapping with Guile.
 
 The implementation for the standard library lives in [`lib/scheme/base`].
 
+![tests](https://github.com/web-scheme/s-lang/actions/workflows/tests.yaml/badge.svg)
+
 [bootstrap/README.md]: bootstrap/README.md
 [mailing list]: https://groups.google.com/a/web-scheme.org/g/dev
 [sweet-expressions]: https://srfi.schemers.org/srfi-110/srfi-110.html

@@ -10,9 +10,9 @@ while true ; do
   esac
 done
 if test "$#" = "0"; then
-  exec /usr/sbin/env GUILE_LOAD_PATH="$(dirname "$0")/.." guile --debug -q -s "$0" $OPTIONS 2>/dev/null
+  exec env GUILE_LOAD_PATH="$(dirname "$0")/.." guile --debug -q -s "$0" $OPTIONS 2>/dev/null
 else
-  cat "$@" | /usr/sbin/env GUILE_LOAD_PATH="$(dirname "$0")/.." guile --debug -q -s "$0" $OPTIONS 2>/dev/null
+  cat "$@" | env GUILE_LOAD_PATH="$(dirname "$0")/.." guile --debug -q -s "$0" $OPTIONS 2>/dev/null
   exit $?
 fi
 

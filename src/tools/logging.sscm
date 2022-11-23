@@ -20,7 +20,7 @@ define log-level-warning 2
 define log-level-info    3
 define log-level-debug   4
 
-define current-log-level log-level-debug
+define current-log-level log-level-warning
 
 define fatal-tag   "\x1b;[1;35m  FATAL\x1b;[0m"  ; Bold magenta.
 define error-tag   "\x1b;[1;31m  ERROR\x1b;[0m"  ; Bold red.
