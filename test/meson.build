@@ -1,9 +1,11 @@
+test_reader = find_program('cat')
+
 test('macros',
-     find_program('cat'),
+     test_reader,
      args: [custom_target('macros-test',
                           depends: [s_lang],
                           # List all files as input and pass them all to the command.
-                          # The test runner sets up the environment and loads each file.
+                          # The test runner sets up the environment and loads each test file.
                           input: unsweet.process('runner.sscm',
                                                  'tap.sscm',
                                                  'unit/macros.sscm',

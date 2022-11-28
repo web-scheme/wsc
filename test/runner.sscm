@@ -24,18 +24,8 @@ closedir(src-build-dir-stream)
 add-to-load-path
   string-append(src-build-dir "/" random)
 
-use-modules ((tap) #:select (test-number))
-
-;; TAP version header; always required.
-display("TAP version 14\n")
-
 ;; Each individial test file should use the `(tap)` library
 ;; to print according to the TAP spec.
 ;; Skip the command name and first argument,
 ;; which, due to needing the generator, is the tap library.
 for-each(load cddr(command-line()))
-
-;; TAP plan footer; always required.
-display("1..")
-display(test-number)
-newline()

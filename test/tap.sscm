@@ -1,40 +1,75 @@
 ;;* Test Anything Protocol.
 (define-module (tap)
-  #:export (test test-number assert)
+  #:export (before-each test run-tests assert assert-equal)
   #:use-module (scheme base)
+  #:use-module ((tools) #:select (λ))
 )
 
-;;* The total number of tests run so far.
-define test-number 0
+;;* List of registered tests.
+;;* To register a test, use the `test` macro.
+define all-tests '()
 
-;;* Print a test point result.
-define display-test-point(status description)
-  display(status)
-  display(" ")
-  display(test-number)
-  display(" - ")
-  display(description)
-  newline()
-  
-;;* Run a single test point, passing a string description and test body.
+;;* Register a single test case, passing a string description and body of statements.
+;;* To run all registered tests, invoke `run-tests`.
+;;* The test is considered to pass if it does not raise an exception.
 define-syntax test
   syntax-rules ()
     (test description body ...)
-      call/cc
-        lambda (continue)
-          with-exception-handler
-            lambda (e)
-              set!(test-number {test-number + 1})
-              display-test-point("not ok" description)
-              when error-object?(e)
-                display("  ---\n  message: ")
-                write(error-object-message(e))
-                display("\n  ...\n")
-              continue('())
-            lambda ()
-              body \\ ...
-              set!(test-number {test-number + 1})
-              display-test-point("ok" description)
+      set!(all-tests
+           cons(cons(description
+                     (λ () body ...))
+                all-tests))
+
+;;* List of registered setup methods.
+;;* To register a setup method, use the [before-each] macro.
+define all-setups '()
+
+;;* Register a body of statements to be run as setup logic before each test case.
+define-syntax before-each
+  syntax-rules ()
+    (before-each body ...)
+      set!(all-setups
+           cons((λ () body ...)
+                all-setups))
+
+;;* Run all registered tests, unregistering them upon completion.
+define run-tests()
+  define run-next-test(setups tests number)
+    if null?(tests)
+      begin
+        set!(all-tests '())
+        set!(all-setups '())
+      let ((description caar(tests))
+           (logic cdar(tests)))
+        call/cc  ; The continuation is used to swallow exceptions.
+          λ (continue)
+            with-exception-handler
+              λ (e)
+                display-test-case("not ok" number description)
+                when error-object?(e)
+                  display("  ---\n  message: ")
+                  write(error-object-message(e))
+                  display("\n  ...\n")
+                continue('())
+              λ ()
+                for-each((λ (setup) setup()) setups)
+                logic()
+                display-test-case("ok" number description)
+        run-next-test(setups cdr(tests) {number + 1})
+  ;; TAP version and plan headers; always required.
+  display("TAP version 14\n1..")
+  display(length(all-tests))
+  newline()
+  run-next-test(reverse(all-setups) reverse(all-tests) 1)
+
+;;* Print a single test case result.
+define display-test-case(status number description)
+  display(status)
+  display(" ")
+  display(number)
+  display(" - ")
+  display(description)
+  newline()
 
 ;;* Assert that a predicate is true.
 ;;*
@@ -44,3 +79,20 @@ define-syntax test
 define assert(condition fail-message)
   unless condition
     error(fail-message)
+
+;;* Assert that `actual` equals `expected` according to [equal?].
+;;*
+;;* Parameters:
+;;*   actual:    Observed value
+;;*   expected:  Expected value
+define assert-equal(actual expected)
+  unless equal?(actual expected)
+    let ((message-port open-output-string()))
+      display("Expected: " message-port)
+      write(expected message-port)
+      display(". Actual: " message-port)
+      write(actual message-port)
+      display("." message-port)
+      let ((message get-output-string(message-port)))
+        close-port(message-port)
+        error(message)

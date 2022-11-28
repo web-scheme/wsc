@@ -5,43 +5,48 @@ use-modules
   (parse macros) #:select (process-all-macros)
   (parse reading) #:select (wrapped-syntax:new wrapped-syntax? unwrap-syntax)
   (tools) #:select (λ map-improper)
-  (tap) #:select (test assert)
+  (tap) #:select (before-each test run-tests assert assert-equal)
 
-;; TODO: Come up with a better way to set up state.
-define fake-env make-env('())
-bind-syntax!(fake-env 'define-syntax 'define-syntax)
+define test-env '()
+
+before-each
+  set!(test-env make-env('()))
+  bind-syntax!(test-env 'define-syntax 'define-syntax)
 
 ;; TODO: Refactor this into a testing utility.
 ;;* Return fake wrapped syntax objects for testing.
-define fake-wrap(datum)
+define test-wrap(datum)
   cond
-    pair?(datum)        wrapped-syntax:new(
-                          map-improper(fake-wrap datum)
-                          fake-env "nom de fichier" 4 20 '())
-    vector?(datum)      wrapped-syntax:new(
-                          vector-map(fake-wrap datum)
-                          fake-env "nom de fichier" 4 20 '())
-    else                wrapped-syntax:new(
-                          datum
-                          fake-env "nom de fichier" 4 20 '())
+    pair?(datum)    wrapped-syntax:new(
+                      map-improper(test-wrap datum)
+                      test-env "nom de fichier" 4 20 '())
+    vector?(datum)  wrapped-syntax:new(
+                      vector-map(test-wrap datum)
+                      test-env "nom de fichier" 4 20 '())
+    else            wrapped-syntax:new(
+                      datum
+                      test-env "nom de fichier" 4 20 '())
 
-test "A basic macro works."
-  define macro-definition
-    process-all-macros(
-      fake-wrap(
-        '(define-syntax derspler
-           (syntax-rules (fer sher)
-             ((derspler obj port ...)
-              (display obj port ...))))))
-;;
-  define macro-expansion
-    process-all-macros(
-      fake-wrap(
-        '(derspler x)))
-;;
-  assert
-    wrapped-syntax?(macro-expansion)
-    "Expanded macro is not wrapped."
-  assert
-    equal?(unwrap-syntax(macro-expansion) '(display x))
-    "Expanded macro incorrect."
+define-syntax test-macro
+  syntax-rules ()
+    (test-macro description macro-definition datum expected-expansion)
+      test description
+        process-all-macros(test-wrap((quote macro-definition)))
+        define macro-expansion
+          process-all-macros(test-wrap((quote datum)))
+        assert(
+          wrapped-syntax?(macro-expansion)
+          "Expanded macro is not wrapped.")
+        assert-equal(
+          unwrap-syntax(macro-expansion)
+          (quote expected-expansion))
+
+test-macro "A basic macro works."
+  (define-syntax foo
+    (syntax-rules ()
+      ((foo obj ...)
+       (bar obj ...))))
+  (foo x y)
+  (bar x y)
+
+run-tests()
