@@ -41,12 +41,28 @@ define-syntax test-macro
           unwrap-syntax(macro-expansion)
           (quote expected-expansion))
 
-test-macro "A basic macro works."
+test-macro "Basic macro"
   (define-syntax foo
     (syntax-rules ()
-      ((foo obj ...)
-       (bar obj ...))))
-  (foo x y)
-  (bar x y)
+      ((foo x ...)
+       (bar x ...))))
+  (foo a b)
+  (bar a b)
+
+test-macro "Basic nested repetition"
+  (define-syntax foo
+    (syntax-rules ()
+      ((foo ((x ...) ...) ...)
+       (bar ((x ...) ...) ...))))
+  (foo ((a b) (c d)) ((e f) (g h)))
+  (bar ((a b) (c d)) ((e f) (g h)))
+
+test-macro "Re-ordered repetition"
+  (define-syntax foo
+    (syntax-rules ()
+      ((foo (x ...) (y ...) ...)
+       (bar (y ...) ... (x ...)))))
+  (foo (a b) (c d) (e f))
+  (bar (c d) (e f) (a b))
 
 run-tests()
