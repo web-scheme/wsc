@@ -92,16 +92,6 @@ define hash-table-map!(proc hash-table)
         hash-table-update!(hash-table key (cut proc key <>))
         aux(cdr(keys))
   aux(hash-table-keys(hash-table))
-define hash-table-copy(hash-table . mutable?)
-  alist->hash-table(hash-table->alist(hash-table))
-define hash-table-prune!(proc hash-table)
-  define aux(keys)
-    unless null?(keys)
-      let ((key car(keys)))
-        if proc(key hash-table-ref(hash-table key))
-          hash-table-delete!(hash-table key)
-        aux(cdr(keys))
-  aux(hash-table-keys(hash-table))
 
 define encapsulate-bindings!(bindings)
   if not(bindings)
@@ -272,9 +262,7 @@ define syntax-rule-expand(ellipsis template bindings)
   define aux(template bindings)
     if hash-table-contains?(bindings template)
       ;; The template is just a bound variable identifer.
-      let ((value hash-table-ref(bindings template)))
-        hash-table-delete!(bindings template)
-        value
+      hash-table-ref(bindings template)
       if pair?(template)
         let ((template-head car(template))
              (template-tail cdr(template)))
@@ -283,15 +271,10 @@ define syntax-rule-expand(ellipsis template bindings)
                   strip-repeat-bindings!(bindings extract-variables(template-head bindings))))
               if sub-bindings
                 ;; Yes more repeat bindings.
-                begin
-                  cons(aux(template-head sub-bindings)
-                       aux(template unstrip-leftovers!(bindings sub-bindings)))
+                cons(aux(template-head sub-bindings)
+                     aux(template bindings))
                 ;; No more repeat bindings to apply; the ellipsis is exhausted.
-                begin
-                  hash-table-prune!
-                    (λ (key value) null?(value))
-                    bindings
-                  aux(cdr(template-tail) bindings)
+                aux(cdr(template-tail) bindings)
             ;; Non-repeated pattern.
             cons(aux(car(template) bindings) aux(cdr(template) bindings))
         if vector?(template)

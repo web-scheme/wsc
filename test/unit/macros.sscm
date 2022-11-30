@@ -44,10 +44,18 @@ define-syntax test-macro
 test-macro "Basic macro"
   (define-syntax foo
     (syntax-rules ()
-      ((foo x ...)
-       (bar x ...))))
-  (foo a b)
-  (bar a b)
+      ((foo)
+       (bar))))
+  (foo)
+  (bar)
+
+test-macro "Re-arranging fixed parameters"
+  (define-syntax foo
+    (syntax-rules ()
+      ((foo u v x y z)
+       (bar x u z u x))))
+  (foo a b c d e)
+  (bar c a e a c)
 
 test-macro "Basic nested repetition"
   (define-syntax foo
