@@ -124,6 +124,15 @@ define merge-bindings!(prior next)
         next
       prior
 
+define merge-bindings-reversed!(prior next)
+  if {not(prior) or not(next)}
+    #f  ; Fail fast.
+    begin
+      hash-table-for-each
+        (λ (key value) hash-table-set!(prior key reverse(value)))
+        next
+      prior
+
 ;;* Attempt to match a single syntax rule pattern.
 ;;*
 ;;* Parameters:
@@ -259,7 +268,7 @@ define unstrip-leftovers!(bindings strip)
 ;;*   The newly expanded datum: [wrapped-syntax]
 define syntax-rule-expand(ellipsis template bindings)
   ;; HF for easier recursion:
-  define aux(template bindings)
+  define aux(template bindings submatched-bindings)
     if hash-table-contains?(bindings template)
       ;; The template is just a bound variable identifer.
       hash-table-ref(bindings template)
@@ -271,16 +280,29 @@ define syntax-rule-expand(ellipsis template bindings)
                   strip-repeat-bindings!(bindings extract-variables(template-head bindings))))
               if sub-bindings
                 ;; Yes more repeat bindings.
-                cons(aux(template-head sub-bindings)
-                     aux(template bindings))
+                ;; Pass along the submatches to be re-introduced later.
+                cons(aux(template-head
+                         sub-bindings
+                         make-hash-table())
+                     aux(template
+                         bindings
+                         unstrip-leftovers!(submatched-bindings sub-bindings)))
                 ;; No more repeat bindings to apply; the ellipsis is exhausted.
-                aux(cdr(template-tail) bindings)
-            ;; Non-repeated pattern.
-            cons(aux(car(template) bindings) aux(cdr(template) bindings))
+                ;; Put the submatches back in case of multiple reference.
+                aux(cdr(template-tail)
+                    merge-bindings-reversed!(bindings submatched-bindings)
+                    make-hash-table())
+            ;; Non-repeated pair pattern.
+            cons(aux(car(template)
+                     bindings
+                     make-hash-table())
+                 aux(cdr(template)
+                     bindings
+                     submatched-bindings))
         if vector?(template)
           list->vector(aux(vector->list(template) bindings))
           template
-  aux(template bindings)
+  aux(template bindings make-hash-table())
 
 ;;* Expand a macro that has already been matched by leading keyword
 ;;* to a piece of Scheme code (wrapped s-expression).

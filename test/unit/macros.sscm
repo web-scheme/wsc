@@ -73,4 +73,20 @@ test-macro "Re-ordered repetition"
   (foo (a b) (c d) (e f))
   (bar (c d) (e f) (a b))
 
+test-macro "Repeated repetition"
+  (define-syntax foo
+    (syntax-rules ()
+      ((foo ((x ...)))
+       (bar x ... (x ...) x ... (x ...)))))
+  (foo ((a b c d)))
+  (bar a b c d (a b c d) a b c d (a b c d))
+
+test-macro "Re-ordered, repeated repetition"
+  (define-syntax foo
+    (syntax-rules ()
+      ((foo (x ...) (y ...))
+       (bar y ... x ... x ... y ... x ...))))
+  (foo (a b c) (d e f))
+  (bar d e f a b c a b c d e f a b c)
+
 run-tests()
