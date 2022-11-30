@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  unit:
+  run-em-all:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

@@ -27,8 +27,7 @@ define-record-type wrapped-syntax
   ;;* Previous version of the wrapped object if macro expansion occurred.
   prev wrapped-syntax.prev
 
-;; Return fake wrapped syntax objects as a stopgap
-;; until a real parser is implemented.
+;; Return fake wrapped syntax objects as a stopgap until a real parser is implemented.
 define fake-wrap(datum env filename)
   ;; Use an auxiliary function to form a closure around `env` and `filename`.
   define fake-wrap-aux(datum)

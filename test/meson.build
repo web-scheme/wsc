@@ -13,4 +13,5 @@ test('macros',
                           command: [guile, '--r7rs', '--no-auto-compile', '@INPUT@'],
                           capture: true,  # Capture output from stdout.
                           output: 'macros.tap')],
-     protocol: 'tap')
+     protocol: 'tap',
+     suite: 'unit')

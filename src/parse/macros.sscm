@@ -20,12 +20,10 @@
 define-record-type transformer
   transformer:new(ellipsis literals rules)
   transformer?
-  ;;* Identifier for ellipses.
-  ellipsis  transformer.ellipsis
-  ;;* List of identifiers for literals.
-  literals  transformer.literals
-  ;;* List of rules, each a pair of the form `(pattern . template)`.
-  rules     transformer.rules
+  ellipsis  transformer.ellipsis  ;* Identifier for ellipses.
+  literals  transformer.literals  ;* List of identifiers for literals.
+  rules     transformer.rules     ;* List of rules,
+                                  ;* each a pair of the form `(pattern . template)`.
 
 ;;* Check for errors and simplify a single macro rule.
 ;;*
@@ -259,15 +257,16 @@ define unstrip-leftovers!(bindings strip)
     strip
   bindings
 
-;;* Expand a matched template with the given bindings.
+;;* Expand the template of a matched rule with the given bindings.
 ;;*
 ;;* Parameters:
-;;*   ellipsis:  Ellipsis symbol, usually `...`.
-;;*   template:  Syntax rule template that matched.
-;;*   bindings:  Hash map of identifiers to bound data, as returned by [syntax-rule-match].
+;;*   ellipsis:  Ellipsis, usually `...`: [symbol]
+;;*   template:  Syntax rule template that matched: [wrapped-syntax]
+;;*   bindings:  Hash map of identifiers to bound wrapped data: [hash-map]
+;;*              as returned by [syntax-rule-match]
 ;;*
 ;;* Result:
-;;*   The newly expanded datum, as a [wrapped-syntax] object.
+;;*   The newly expanded datum: [wrapped-syntax]
 define syntax-rule-expand(ellipsis template bindings)
   ;; HF for easier recursion:
   define aux(template bindings)
@@ -300,8 +299,18 @@ define syntax-rule-expand(ellipsis template bindings)
           template
   aux(template bindings)
 
-;; TODO: Document.
+;;* Expand a macro that has already been matched by leading keyword
+;;* to a piece of Scheme code (wrapped s-expression).
+;;*
+;;* Parameters:
+;;*   wrapped-datum:  Scheme code to expand: [wrapped-syntax]
+;;*   transformer:    User macro to apply: [transformer]
+;;*
+;;* Result:
+;;*   Expanded version of `wrapped-datum`: [wrapped-syntax]
 define expand-macro(wrapped-datum transformer)
+  ;; TODO: Process macros as real wrapped syntax,
+  ;;       instead of just unwrapping it here then fake-wrapping it later.
   define datum unwrap-syntax(wrapped-datum)
   define ellipsis transformer.ellipsis(transformer)
   define literals transformer.literals(transformer)
@@ -313,8 +322,6 @@ define expand-macro(wrapped-datum transformer)
       let* ((next-rule car(rules))
             (match-bindings syntax-rule-match(ellipsis literals car(next-rule) datum)))
         if match-bindings
-          ;; TODO: Process macros as real wrapped syntax,
-          ;;       instead of just fake-wrapping the expanded datum here.
           let ((expanded fake-wrap(syntax-rule-expand(ellipsis cdr(next-rule) match-bindings)
                                    '()
                                    "<expanded>")))
@@ -324,20 +331,22 @@ define expand-macro(wrapped-datum transformer)
   log-debug("Expanding macro" wrapped-datum)
   try-rules(transformer.rules(transformer))
 
-;;* Recursively record all macro definitions and expand all macro instances
-;;* until no further expansion is possible.
+;;* Recursively bind all macro definitions and expand all macro uses
+;;* until no further expansion is possible,
+;;* using the embedded [env] in the wrapped syntaxes to create and look up bindings
+;;* referentially transparently.
 ;;*
 ;;* Parameters:
-;;*   wrapped-datum:  [wrapped-syntax] representing the Scheme code to expand.
+;;*   wrapped-datum:  Scheme code to expand: [wrapped-syntax]
 ;;*
 ;;* Result:
-;;*   Expanded version of `wrapped-datum`.
+;;*   Expanded version of `wrapped-datum`: [wrapped-syntax]
 define process-all-macros(wrapped-datum)
   define datum wrapped-syntax.datum(wrapped-datum)
   match datum
     (($ wrapped-syntax (? symbol? name)) . tail)
-      ;; `datum` has the unwrapped form `(name . tail)` where `name` is an identifier.
-      ;; Check to see if the `name` is a macro keyword.
+      ;; `datum` has unwrapped form `(name . tail)` where `name` is an identifier.
+      ;; Check to see if `name` is a macro keyword.
       let* ((env           wrapped-syntax.env(wrapped-datum))
             (maybe-syntax  lookup-syntax(env name)))
         ;; `maybe-syntax` is either a [transformer] object (user macro),
