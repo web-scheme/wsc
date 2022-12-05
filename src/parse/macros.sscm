@@ -6,7 +6,7 @@
   #:use-module (srfi srfi-69)  ; Basic hash tables.
   #:use-module (ice-9 match)   ; [https://srfi.schemers.org/srfi-200/srfi-200.html]
   #:use-module ((parse env)     #:select (bind-syntax! lookup-syntax))
-  #:use-module ((parse reading) #:select (wrapped-syntax
+  #:use-module ((syntax wrap)   #:select (wrapped-syntax
                                           wrapped-syntax.datum
                                           wrapped-syntax.set-datum!
                                           wrapped-syntax.env

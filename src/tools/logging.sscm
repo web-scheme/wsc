@@ -6,12 +6,12 @@
             log-error
             log-fatal)
   #:use-module (scheme base)
-  #:use-module ((parse reading) #:select (wrapped-syntax?
-                                          wrapped-syntax.filename
-                                          wrapped-syntax.line
-                                          wrapped-syntax.column
-                                          wrapped-syntax.prev
-                                          unwrap-syntax))
+  #:use-module ((syntax wrap) #:select (wrapped-syntax?
+                                        wrapped-syntax.filename
+                                        wrapped-syntax.line
+                                        wrapped-syntax.column
+                                        wrapped-syntax.prev
+                                        unwrap-syntax))
 )
 
 define log-level-fatal   0

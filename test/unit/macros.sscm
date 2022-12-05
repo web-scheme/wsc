@@ -3,7 +3,7 @@
 use-modules
   (parse env) #:select (make-env bind-syntax!)
   (parse macros) #:select (process-all-macros)
-  (parse reading) #:select (wrapped-syntax:new wrapped-syntax? unwrap-syntax)
+  (syntax wrap) #:select (wrapped-syntax:new wrapped-syntax? unwrap-syntax)
   (tools) #:select (λ map-improper)
   (tap) #:select (before-each test run-tests assert assert-equal)
 

@@ -1,56 +1,10 @@
 ;;* Tools for manipulating lexical environments.
 (define-module (parse reading)
-  #:export (wrapped-syntax wrapped-syntax:new wrapped-syntax?
-            wrapped-syntax.datum wrapped-syntax.set-datum!
-            wrapped-syntax.env wrapped-syntax.filename
-            wrapped-syntax.line wrapped-syntax.column wrapped-syntax.prev
-            read-all-wrapped unwrap-syntax fake-wrap)
+  #:export (read-all-wrapped)
   #:use-module (scheme base)
-  #:use-module ((tools) #:select (λ
-                                  collect-list
-                                  map-improper))
+  #:use-module ((syntax wrap) #:select (fake-wrap))
+  #:use-module ((tools) #:select (λ collect-list))
 )
-
-define-record-type wrapped-syntax
-  wrapped-syntax:new(datum env filename line column prev)
-  wrapped-syntax?
-  ;;* Wrapped object.
-  datum wrapped-syntax.datum wrapped-syntax.set-datum!
-  ;;* Lexical environment in which `datum` exists.
-  env wrapped-syntax.env
-  ;;* Original file in which `datum` appeared.
-  filename wrapped-syntax.filename
-  ;;* Line number of original appearance.
-  line wrapped-syntax.line
-  ;;* Column number of original appearance.
-  column wrapped-syntax.column
-  ;;* Previous version of the wrapped object if macro expansion occurred.
-  prev wrapped-syntax.prev
-
-;; Return fake wrapped syntax objects as a stopgap until a real parser is implemented.
-define fake-wrap(datum env filename)
-  ;; Use an auxiliary function to form a closure around `env` and `filename`.
-  define fake-wrap-aux(datum)
-    cond
-      eof-object?(datum)  datum  ; Terminating condition for `collect-list`.
-      pair?(datum)        wrapped-syntax:new(
-                            map-improper(fake-wrap-aux datum)
-                            env filename 4 20 '())
-      vector?(datum)      wrapped-syntax:new(
-                            vector-map(fake-wrap-aux datum)
-                            env filename 4 20 '())
-      else                wrapped-syntax:new(
-                            datum
-                            env filename 4 20 '())
-  fake-wrap-aux(datum)
-
-;;* Recursively unwrap a wrapped syntax object.
-define unwrap-syntax(syntax)
-  define datum wrapped-syntax.datum(syntax)
-  cond
-    pair?(datum)    map-improper(unwrap-syntax datum)
-    vector?(datum)  vector-map(unwrap-syntax datum)
-    else            datum
 
 ;;* Read Scheme data from a textual input port until EOF.
 ;;*
