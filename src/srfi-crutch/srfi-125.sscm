@@ -1,0 +1,27 @@
+;;* Crutch implementing parts of SRFI-125 (intermediate hash tables) based on SRFI-69.
+(define-module (srfi-crutch srfi-125)
+  #:export (hash-table-contains? hash-table-empty? hash-table-for-each hash-table-map!)
+  #:use-module (scheme base)
+  #:use-module ((srfi srfi-26)  #:select (cut))
+  #:use-module ((srfi srfi-69)  #:select (hash-table-exists?
+                                          hash-table-keys
+                                          hash-table-size
+                                          hash-table-update!
+                                          hash-table-walk))
+)
+
+define hash-table-empty?(hash-table)
+  {hash-table-size(hash-table) = 0}
+
+define hash-table-contains? hash-table-exists?
+
+define hash-table-for-each(proc hash-table)
+  hash-table-walk(hash-table proc)
+
+define hash-table-map!(proc hash-table)
+  define aux(keys)
+    unless null?(keys)
+      let ((key car(keys)))
+        hash-table-update!(hash-table key (cut proc key <>))
+        aux(cdr(keys))
+  aux(hash-table-keys(hash-table))

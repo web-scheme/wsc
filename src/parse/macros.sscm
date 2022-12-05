@@ -2,18 +2,26 @@
 (define-module (parse macros)
   #:export (process-all-macros)
   #:use-module (scheme base)
-  #:use-module (srfi srfi-26)  ; `cut` / `cute`
-  #:use-module (srfi srfi-69)  ; Basic hash tables.
-  #:use-module (ice-9 match)   ; [https://srfi.schemers.org/srfi-200/srfi-200.html]
-  #:use-module ((parse env)     #:select (bind-syntax! lookup-syntax))
-  #:use-module ((syntax wrap)   #:select (wrapped-syntax
-                                          wrapped-syntax.datum
-                                          wrapped-syntax.set-datum!
-                                          wrapped-syntax.env
-                                          unwrap-syntax
-                                          fake-wrap))
-  #:use-module ((tools)         #:select (λ map-improper))
-  #:use-module ((tools logging) #:select (log-debug log-error log-fatal))
+  #:use-module ((srfi srfi-26)         #:select (cut))
+  #:use-module ((srfi srfi-69)         #:select (alist->hash-table
+                                                 hash-table-ref
+                                                 hash-table-ref/default
+                                                 hash-table-set!
+                                                 hash-table-update!/default
+                                                 make-hash-table))
+  #:use-module ((srfi-crutch srfi-125) #:select (hash-table-contains?
+                                                 hash-table-for-each
+                                                 hash-table-map!))
+  #:use-module ((ice-9 match)          #:select (match))
+  #:use-module ((parse env)            #:select (bind-syntax! lookup-syntax))
+  #:use-module ((syntax wrap)          #:select (wrapped-syntax
+                                                 wrapped-syntax.datum
+                                                 wrapped-syntax.set-datum!
+                                                 wrapped-syntax.env
+                                                 unwrap-syntax
+                                                 fake-wrap))
+  #:use-module ((tools)                #:select (λ map-improper))
+  #:use-module ((tools logging)        #:select (log-debug log-error log-fatal))
 )
 
 ;;* Representation of a macro transformer.
@@ -78,20 +86,6 @@ define define-macro(wrapped-datum env tail)
       ;; TODO: Should raise syntax-error.
       log-fatal("Invalid macro definition" wrapped-datum)
   wrapped-datum
-
-;; This should all be defined in SRFI 125:
-define hash-table-empty?(hash-table)
-  {hash-table-size(hash-table) = 0}
-define hash-table-contains? hash-table-exists?
-define hash-table-for-each(proc hash-table)
-  hash-table-walk(hash-table proc)
-define hash-table-map!(proc hash-table)
-  define aux(keys)
-    unless null?(keys)
-      let ((key car(keys)))
-        hash-table-update!(hash-table key (cut proc key <>))
-        aux(cdr(keys))
-  aux(hash-table-keys(hash-table))
 
 define encapsulate-bindings!(bindings)
   if not(bindings)
