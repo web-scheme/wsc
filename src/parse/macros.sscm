@@ -1,6 +1,6 @@
 ;;* Macro definition and expansion
 (define-module (parse macros)
-  #:export (process-all-macros)
+  #:export (process-all-macros transformer transformer?)
   #:use-module (scheme base)
   #:use-module ((srfi srfi-26)         #:select (cut))
   #:use-module ((srfi srfi-69)         #:select (alist->hash-table
@@ -18,7 +18,7 @@
                                                  wrapped-syntax.datum
                                                  wrapped-syntax.set-datum!
                                                  wrapped-syntax.env
-                                                 unwrap-syntax
+                                                 unwrap-all-syntax
                                                  fake-wrap))
   #:use-module ((tools)                #:select (λ map-improper))
   #:use-module ((tools logging)        #:select (log-debug log-error log-fatal))
@@ -43,8 +43,8 @@ define-record-type transformer
 define unwrap-macro-rule(wrapped-rule)
   match wrapped-rule
     ($ wrapped-syntax (wrapped-pattern wrapped-template))
-      cons(unwrap-syntax(wrapped-pattern)
-           unwrap-syntax(wrapped-template))
+      cons(unwrap-all-syntax(wrapped-pattern)
+           unwrap-all-syntax(wrapped-template))
     _
       ;; TODO: Should raise syntax-error.
       log-fatal("Invalid macro definition" wrapped-datum)
@@ -310,7 +310,7 @@ define syntax-rule-expand(ellipsis template bindings)
 define expand-macro(wrapped-datum transformer)
   ;; TODO: Process macros as real wrapped syntax,
   ;;       instead of just unwrapping it here then fake-wrapping it later.
-  define datum unwrap-syntax(wrapped-datum)
+  define datum unwrap-all-syntax(wrapped-datum)
   define ellipsis transformer.ellipsis(transformer)
   define literals transformer.literals(transformer)
   define try-rules(rules)

@@ -4,27 +4,30 @@
             wrapped-syntax.datum wrapped-syntax.set-datum!
             wrapped-syntax.env wrapped-syntax.filename
             wrapped-syntax.line wrapped-syntax.column wrapped-syntax.prev
-            unwrap-syntax fake-wrap)
+            unwrap-all-syntax unwrap-symbol unwrap-s-expression
+            fake-wrap)
   #:use-module (scheme base)
+  #:use-module ((parse env) #:select (lookup-variable-or-builtin))
   #:use-module ((tools) #:select (map-improper))
 )
 
-;;* A wrapped syntax object is a datum representing an expression in a Scheme program,
-;;* with extra metadata attached, like rource file name and line number.
+;* A datum representing an expression in a Scheme program,
+;* with extra metadata attached or "wrapped around it",
+;* such as source file name and line number.
 define-record-type wrapped-syntax
   wrapped-syntax:new(datum env filename line column prev)
   wrapped-syntax?
-  ;;* Wrapped object.
+  ;* Wrapped object.
   datum wrapped-syntax.datum wrapped-syntax.set-datum!
-  ;;* Lexical environment in which `datum` exists.
+  ;* [Environment](env) in which `datum` exists.
   env wrapped-syntax.env
-  ;;* Original file in which `datum` appeared.
+  ;* Original [filename](string) in which `datum` appeared.
   filename wrapped-syntax.filename
-  ;;* Line number of original appearance.
+  ;* Line [number](integer) of original appearance.
   line wrapped-syntax.line
-  ;;* Column number of original appearance.
+  ;* Column [number](integer) of original appearance.
   column wrapped-syntax.column
-  ;;* Previous version of the wrapped object if macro expansion occurred.
+  ;* Previous version of the [wrapped object](wrapped-syntax) if macro expansion occurred.
   prev wrapped-syntax.prev
 
 ;; Return fake wrapped syntax objects as a stopgap until a real parser is implemented.
@@ -44,10 +47,45 @@ define fake-wrap(datum env filename)
                             env filename 4 20 '())
   fake-wrap-aux(datum)
 
-;;* Recursively unwrap a wrapped syntax object.
-define unwrap-syntax(syntax)
+;* Recursively unwrap a wrapped syntax object.
+define unwrap-all-syntax(syntax)
   define datum wrapped-syntax.datum(syntax)
   cond
-    pair?(datum)    map-improper(unwrap-syntax datum)
-    vector?(datum)  vector-map(unwrap-syntax datum)
+    pair?(datum)    map-improper(unwrap-all-syntax datum)
+    vector?(datum)  vector-map(unwrap-all-syntax datum)
     else            datum
+
+;* Try to unwrap a symbol.
+;*
+;* Parameters
+;*   syntax: '[wrapped syntax](wrapped-syntax) object'
+;*
+;* Result
+;*   The symbol value, or `#f` if `syntax` does not directly wrap a symbol.
+define unwrap-symbol(syntax)
+  define datum wrapped-syntax.datum(syntax)
+  and symbol?(datum)
+      datum
+
+;* Try to partially unwrap an s-expression, after all user macros have been expanded.
+;*
+;* Parameters
+;*   syntax: '[wrapped syntax](wrapped-syntax) object'
+;*
+;* Result
+;*   If `syntax` wraps an s-expression, return a list where the head is either
+;*
+;*   - a [variable reference](location) object if `syntax`'s head is bound to a variable
+;*   - a [symbol] if it's bound to built-in syntax
+;*   - `#f` if it's not bound to anything
+;*
+;*   and the tail is the untouched tail of `syntax`.
+;*   Otherwise, return `#f`.
+define unwrap-s-expression(syntax)
+  define datum    wrapped-syntax.datum(syntax)
+  define head-id  (and pair?(datum)
+                       unwrap-symbol(car(datum)))
+  and head-id
+      cons(lookup-variable-or-builtin(wrapped-syntax.env(car(datum))
+                                      head-id)
+           cdr(datum))

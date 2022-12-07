@@ -3,7 +3,7 @@
 use-modules
   (parse env) #:select (make-env bind-syntax!)
   (parse macros) #:select (process-all-macros)
-  (syntax wrap) #:select (wrapped-syntax:new wrapped-syntax? unwrap-syntax)
+  (syntax wrap) #:select (wrapped-syntax:new wrapped-syntax? unwrap-all-syntax)
   (tools) #:select (λ map-improper)
   (tap) #:select (before-each test run-tests assert assert-equal)
 
@@ -14,7 +14,7 @@ before-each
   bind-syntax!(test-env 'define-syntax 'define-syntax)
 
 ;; TODO: Refactor this into a testing utility.
-;;* Return fake wrapped syntax objects for testing.
+;* Return fake wrapped syntax objects for testing.
 define test-wrap(datum)
   cond
     pair?(datum)    wrapped-syntax:new(
@@ -38,7 +38,7 @@ define-syntax test-macro
           wrapped-syntax?(macro-expansion)
           "Expanded macro is not wrapped.")
         assert-equal(
-          unwrap-syntax(macro-expansion)
+          unwrap-all-syntax(macro-expansion)
           (quote expected-expansion))
 
 test-macro "Basic macro"

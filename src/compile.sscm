@@ -1,0 +1,10 @@
+;;* TODO
+(define-module (compile)
+  #:export (compile-datum)
+  #:use-module (scheme base)
+  #:use-module ((parse env) #:select ())
+  #:use-module ((syntax wrap) #:select (unwrap-all-syntax))
+)
+
+define compile-datum(syntax)
+  unwrap-all-syntax(syntax)

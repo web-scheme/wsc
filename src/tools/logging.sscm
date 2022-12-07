@@ -11,7 +11,7 @@
                                         wrapped-syntax.line
                                         wrapped-syntax.column
                                         wrapped-syntax.prev
-                                        unwrap-syntax))
+                                        unwrap-all-syntax))
 )
 
 define log-level-fatal   0
@@ -38,7 +38,7 @@ define log-origin(wrapped-datum out-port prefix)
   display("\x1b;[0m \x1b;[2mcolumn\x1b;[0m \x1b;[1m" out-port)
   display(wrapped-syntax.column(wrapped-datum) out-port)
   display("\x1b;[2m\x1b;[0m\n              " out-port)
-  write(unwrap-syntax(wrapped-datum) out-port)
+  write(unwrap-all-syntax(wrapped-datum) out-port)
   newline(out-port)
   unless null?(wrapped-syntax.prev(wrapped-datum))
     log-origin(wrapped-syntax.prev(wrapped-datum) out-port "expanded from")

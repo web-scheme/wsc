@@ -1,6 +1,7 @@
 s_lang = custom_target('s-lang',
                        build_by_default: true,
                        input: unsweet.process('main.sscm',
+                                              'compile.sscm',
                                               'parse/env.sscm',
                                               'parse/macros.sscm',
                                               'parse/reading.sscm',
