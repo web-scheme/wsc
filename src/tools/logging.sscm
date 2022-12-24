@@ -77,9 +77,10 @@ define log-info(msg . objs)
 define log-warning(msg . objs)
   log-general(log-level-warning warning-tag msg objs)
 
-;;* Log an error-level message with possible irritants.
+;;* Log an error-level message with possible irritants and return `#f`.
 define log-error(msg . objs)
   log-general(log-level-error error-tag msg objs)
+  #f
 
 ;;* Log a fatal-level message with possible irritants and exit abnormally.
 define log-fatal(msg . objs)
