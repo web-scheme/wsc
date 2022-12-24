@@ -29,14 +29,9 @@ bind-syntax!(root-env 'define-syntax  'define-syntax)
 ;;*              written in text format if the port is textual, otherwise binary.
 define compile!(filename in-port out-port)
   newline()
+  ;; TODO: Come up with a sane way to produce output based on compiler flags
   write(
     compile-modules(
       map(process-all-macros
           read-all-wrapped(in-port root-env filename))))
   newline()
-
-;; Good enough for now.
-define filename "../test/integration/basic/input.scm"
-define in-port open-input-file(filename)
-compile!(filename in-port current-output-port())
-close-port(in-port)

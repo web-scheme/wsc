@@ -87,6 +87,7 @@ define assert(condition fail-message)
 ;;*   expected:  Expected value
 define assert-equal(actual expected)
   unless equal?(actual expected)
+    ;; TODO: Prefer string formatting over writing to string port.
     let ((message-port open-output-string()))
       display("Expected: " message-port)
       write(expected message-port)

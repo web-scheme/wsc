@@ -1,4 +1,4 @@
-# `s-lang`
+# `s-lang` &middot; [![CI status](https://github.com/web-scheme/s-lang/actions/workflows/tests.yaml/badge.svg)](https://github.com/web-scheme/s-lang/actions/workflows/tests.yaml)
 
 The [WebScheme] compiler.
 
@@ -17,8 +17,8 @@ GitHub stars appreciated!
 Read [bootstrap/README.md].
 
 Join the [mailing list] to get updates and ask questions.
-Frankly, it'll probably be pretty quiet for a while,
-but hoping to pick up the pace as WASM matures.
+It'll probably be pretty quiet for a while.
+Hoping to pick up the pace as WASM matures.
 
 The source code is mostly written using [sweet-expressions].
 Only standard R⁷RS-small
@@ -26,8 +26,6 @@ or basic R⁷RS-large assumptions (e.g. [intermediate hash tables]).
 Some wrappers are used for bootstrapping with Guile.
 
 The implementation for the standard library lives in [`lib/scheme/base`].
-
-![tests](https://github.com/web-scheme/s-lang/actions/workflows/tests.yaml/badge.svg)
 
 [bootstrap/README.md]: bootstrap/README.md
 [mailing list]: https://groups.google.com/a/web-scheme.org/g/dev

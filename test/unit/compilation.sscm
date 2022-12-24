@@ -1,0 +1,50 @@
+;;* Unit tests for compilation from wrapped syntax to compiled modules.
+
+use-modules
+  (compile) #:select (compile-modules compiled-module:new)
+  (parse env) #:select (make-env bind-syntax!)
+  (parse macros) #:select (process-all-macros)
+  (syntax wrap) #:select (wrapped-syntax:new wrapped-syntax? unwrap-all-syntax)
+  (tools) #:select (λ map-improper)
+  (tap) #:select (before-each test run-tests assert assert-equal)
+
+define test-env '()
+
+before-each
+  set!(test-env make-env('()))
+  bind-syntax!(test-env 'define-syntax 'define-syntax)
+  bind-syntax!(test-env 'define-library 'define-library)
+
+;; TODO: Refactor this into a testing utility.
+;* Return fake wrapped syntax objects for testing.
+define test-wrap(datum)
+  cond
+    pair?(datum)    wrapped-syntax:new(
+                      map-improper(test-wrap datum)
+                      test-env "nom de fichier" 4 20 '())
+    vector?(datum)  wrapped-syntax:new(
+                      vector-map(test-wrap datum)
+                      test-env "nom de fichier" 4 20 '())
+    else            wrapped-syntax:new(
+                      datum
+                      test-env "nom de fichier" 4 20 '())
+
+define-syntax test-compilation
+  syntax-rules ()
+    (test-compilation description top-level-data ... expected-executable (expected-libraries ...))
+      test description
+        assert-equal(
+          compile-modules(map(test-wrap (quote (top-level-data ...))))
+          (list expected-executable expected-libraries ...))
+
+test-compilation "A basic library"
+  (define-library (a b c 2 3 d)
+    (import (scheme base))
+    (begin
+     (display "Bonjour, monde")))
+  compiled-module:new(
+    '((foo foo (foo foo foo)))
+    '())
+  ()
+
+run-tests()

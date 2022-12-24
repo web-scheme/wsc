@@ -3,6 +3,7 @@
   #:export (add-import
             compile-modules
             compiled-module
+            compiled-module:new
             new-empty-module)
   #:use-module (scheme base)
   #:use-module ((compile library) #:select (compile-define-library))
