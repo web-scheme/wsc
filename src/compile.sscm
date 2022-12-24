@@ -1,10 +1,98 @@
 ;;* TODO
 (define-module (compile)
-  #:export (compile-datum)
+  #:export (add-import
+            compile-modules
+            compiled-module
+            new-empty-module)
   #:use-module (scheme base)
-  #:use-module ((parse env) #:select ())
-  #:use-module ((syntax wrap) #:select (unwrap-all-syntax))
+  #:use-module ((compile library) #:select (compile-define-library))
+  #:use-module ((syntax wrap) #:select (unwrap-symbol
+                                        resolve-s-expression
+                                        wrapped-syntax.datum))
+  #:use-module ((tools logging) #:select (log-error))
 )
 
-define compile-datum(syntax)
-  unwrap-all-syntax(syntax)
+;* Self-contained WASM module.
+define-record-type compiled-module
+  compiled-module:new(imports exports)
+  compiled-module?
+  ;* List of [imports](https://webassembly.github.io/spec/core/text/modules.html#imports),
+  ;* each being a list consisting of:
+  ;* - module [name](string)
+  ;* - object [name](string)
+  ;* - import description, itself a list consisting of:
+  ;*   - [type](symbol): either `func`, `table`, `memory`, or `global`
+  ;*   - [index](integer) into the TODO
+  ;*   - subtype, itself a list, depending on the type, TODO
+  imports compiled-module.imports compiled-module.set-imports!
+  ;* List of [exports](https://webassembly.github.io/spec/core/text/modules.html#exports),
+  ;* each being a list consisting of:
+  ;* - object [name](string)
+  ;* - export description, itself a list consisting of:
+  ;*   - [type](symbol): either `func`, `table`, `memory`, or `global`
+  ;*   - [index](integer) into the TODO
+  exports compiled-module.exports compiled-module.set-exports!
+
+;* Return a new, empty [module](compiled-module).
+define new-empty-module()
+  compiled-module:new('() '())
+
+;* TODO
+define add-import(module module-name object-name type index subtype)
+  compiled-module.set-imports!(
+    module
+    cons(list(module-name object-name list(type index subtype))
+         compiled-module.imports(module)))
+
+;* Compile top-level syntax (a datum with no parent).
+;*
+;* Parameters
+;*   syntax: '[wrapped syntax](wrapped-syntax) object'
+;*
+;* Result
+;*   Either a [module](compiled-module),
+;*   or a TODO
+define compile-top-level(syntax)
+  define resolved resolve-s-expression(syntax)
+  if resolved
+    let ((head car(resolved))
+         (tail cdr(resolved)))
+      if head
+        if symbol?(head)
+          ;; Symbol means built-in syntax.
+          case head
+            (define)
+              if null?(tail)
+                log-error("Empty definition" syntax)
+                1  ; TODO
+            (define-library)
+              if null?(tail)
+                log-error("Empty library definition" syntax)
+                compile-define-library(tail)
+            (define-syntax)
+              if null?(tail)
+                log-error("Empty syntax definition" syntax)
+                3  ; TODO
+          ;; `head` must be a [location].
+          4  ; TODO
+        ;; `syntax` is an s-expression but the head is unbound.
+        log-error("Unbound variable"
+                  car(wrapped-syntax.datum(syntax)))
+    begin
+      set! resolved unwrap-symbol(syntax)
+      if resolved
+        5  ; TODO
+        6  ; TODO
+
+;* Compile a list of top-level syntax.
+;*
+;* Parameters
+;*   wrapped-data:  List of [wrapped syntax](wrapped-syntax) objects.
+;*
+;* Result
+;*   List of [modules](compiled-module),
+;*   where the head of the list is an executable module
+;*   comprised of the Scheme code not enclosed in a library,
+;*   and any subsequent modules are importable libraries.
+define compile-modules(wrapped-data)
+  map(compile-top-level wrapped-data)

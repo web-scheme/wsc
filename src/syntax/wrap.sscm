@@ -4,10 +4,10 @@
             wrapped-syntax.datum wrapped-syntax.set-datum!
             wrapped-syntax.env wrapped-syntax.filename
             wrapped-syntax.line wrapped-syntax.column wrapped-syntax.prev
-            unwrap-all-syntax unwrap-symbol unwrap-s-expression
+            unwrap-all-syntax unwrap-symbol resolve-s-expression
             fake-wrap)
   #:use-module (scheme base)
-  #:use-module ((parse env) #:select (lookup-variable-or-builtin))
+  #:use-module ((parse env) #:select (env env-new env.bindings lookup-variable-or-builtin))
   #:use-module ((tools) #:select (map-improper))
 )
 
@@ -70,7 +70,9 @@ define unwrap-symbol(syntax)
 ;* Try to partially unwrap an s-expression, after all user macros have been expanded.
 ;*
 ;* Parameters
-;*   syntax: '[wrapped syntax](wrapped-syntax) object'
+;*   syntax:            '[wrapped syntax](wrapped-syntax) object'
+;*   override-bindings:  Overriding [bindings](env.bindings) for identifier resolution;
+;*                       useful for resolving built-in syntax in particular contexts.
 ;*
 ;* Result
 ;*   If `syntax` wraps an s-expression, return a list where the head is either
@@ -81,11 +83,13 @@ define unwrap-symbol(syntax)
 ;*
 ;*   and the tail is the untouched tail of `syntax`.
 ;*   Otherwise, return `#f`.
-define unwrap-s-expression(syntax)
+define resolve-s-expression(syntax . override-bindings)
   define datum    wrapped-syntax.datum(syntax)
   define head-id  (and pair?(datum)
                        unwrap-symbol(car(datum)))
   and head-id
-      cons(lookup-variable-or-builtin(wrapped-syntax.env(car(datum))
-                                      head-id)
-           cdr(datum))
+      cons(
+        lookup-variable-or-builtin(
+          env-new(override-bindings wrapped-syntax.env(car(datum)))
+          head-id)
+        cdr(datum))

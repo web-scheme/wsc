@@ -1,0 +1,94 @@
+;;* TODO
+(define-module (compile library)
+  #:export (compile-define-library compile-library-body)
+  #:use-module (scheme base)
+  #:use-module ((srfi srfi-26) #:select (cut))
+  #:use-module ((compile) #:select (add-import
+                                    compiled-module
+                                    new-empty-module))
+  #:use-module ((parse env) #:select (bind-syntax!
+                                      lookup-variable-or-builtin
+                                      make-env))
+  #:use-module ((syntax wrap) #:select (unwrap-all-syntax
+                                        unwrap-symbol
+                                        resolve-s-expression
+                                        wrapped-syntax.datum
+                                        wrapped-syntax.env))
+  #:use-module ((tools) #:select (λ))
+  #:use-module ((tools logging) #:select (log-error))
+)
+
+define unwrap-library-name-part(wrapped-part bail)
+  define part wrapped-syntax.datum(wrapped-part)
+  if {symbol?(part) or {exact-integer?(part) and {part >= 0}}}
+    part
+    bail(
+      log-error(
+        "Library name must comprise only identifiers and exact non-negative integers"
+        wrapped-part))
+
+define compile-library-import(import-sets module)
+  add-import(module 'foo 'foo 'foo 'foo 'foo)
+
+define compile-library-export(export-specs module)
+  'TODO
+
+define compile-library-begin(statements module)
+  'TODO
+
+define library-declaration-syntax
+  '((export . export)
+    (import . import)
+    (begin . begin)
+    (include . include)
+    (include-ci . include-ci)
+    (include-library-declarations . include-library-declarations)
+    (cond-expand . cond-expand))
+
+define compile-library-body(name body)
+  define module new-empty-module()
+  for-each
+    λ (declaration)
+      define resolved
+        apply(resolve-s-expression declaration library-declaration-syntax)
+      if resolved
+        let ((head car(resolved))
+             (tail cdr(resolved)))
+          if head
+            case head
+              (import)
+                if null?(tail)
+                  log-error("Empty import set" declaration)
+                  compile-library-import(tail module)
+              (export)
+                compile-library-export(tail module)
+              (begin)
+                compile-library-begin(tail module)
+              else
+                ;; The "declaration" is an s-expression, but not valid.
+                log-error("Invalid library declaration" declaration)
+            log-error("Unbound variable"
+                      car(wrapped-syntax.datum(declaration)))
+        ;; The "declaration" is *not* an s-expression.
+        log-error("Invalid library declaration" declaration)
+    body
+  module
+
+;* Compile a library definition into a [WASM module](compiled-module).
+;*
+;* Parameters
+;*   name-and-body:  List containing at least one item.
+;*
+;* Result
+;*   Compiled [WASM module](compiled-module).
+define compile-define-library(name-and-body)
+  ;; [https://web-scheme.org/r7rs-small.pdf#subsection.7.1.7]
+  define wrapped-name car(name-and-body)
+  define name wrapped-syntax.datum(wrapped-name)
+  call/cc
+    λ (bail)
+      if list?(name)
+        compile-library-body(
+          map((cut unwrap-library-name-part <> bail) name)
+          cdr(name-and-body))
+        bail(log-error("Library name must be a list" wrapped-name))
