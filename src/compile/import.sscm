@@ -1,0 +1,81 @@
+;;* Import set parsing and library lookup.
+(define-module (compile import)
+  #:export (lookup-imports wasm-import wasm-import:new)
+  #:use-module (scheme base)
+  #:use-module ((srfi srfi-26) #:select (cut))
+  #:use-module ((syntax wrap) #:select (resolve-s-expression
+                                        wrapped-syntax.datum
+                                        unwrap-library-name-part))
+  #:use-module ((tools) #:select (λ external-rep))
+  #:use-module ((tools logging) #:select (log-error))
+)
+
+;* A [Wasm import](https://webassembly.github.io/spec/core/text/modules.html#imports).
+define-record-type wasm-import
+  wasm-import:new(module name kind type index)
+  wasm-import?
+  ;* Module [name](string).
+  module wasm-import.module
+  ;* [Name](string) of imported object.
+  name wasm-import.name
+  ;* [Kind](symbol): either `func`, `table`, `memory`, or `global`.
+  kind wasm-import.kind
+  ;* Wasm type of the object, depending on `kind`.
+  type wasm-import.type
+  ;* [Index](integer) into the TODO.
+  index wasm-import.index
+
+;* Look up a [library dependency](TODO: Link to help page describing search paths etc.)
+;* and return all objects exported by that dependency,
+;* for import into the compiling module.
+;*
+;* Parameters
+;*   library-name: '[Wrapped syntax](wrapped-syntax) representing a library name.'
+;*
+;* Result
+;*   List of [imports](wasm-import),
+;*   or `#f` if the import set is invalid or the library cannot be found.
+define lookup-all-imports(library-name)
+  define name wrapped-syntax.datum(library-name)
+  call/cc
+    λ (bail)
+      if list?(name)
+        let ((module-name external-rep(map((cut unwrap-library-name-part <> bail) name))))
+          list(wasm-import:new(module-name 'TODO 'TODO 'TODO 'TODO))
+        bail(log-error("Library name must be a list" wrapped-name))
+
+;* Built-in syntax for import sets.
+define import-set-syntax
+  '((only . only)
+    (except . except)
+    (prefix . prefix)
+    (rename . rename))
+
+;* Look up a [library dependency](TODO: Link to help page describing search paths etc.)
+;* and return the objects exported by that dependency
+;* that are selected for import into the compiling module.
+;*
+;* Parameters
+;*   import-set: '[Wrapped syntax](wrapped-syntax) representing an import set.'
+;*
+;* Result
+;*   List of [imports](wasm-import),
+;*   or `#f` if the import set is invalid or the library cannot be found.
+define lookup-imports(import-set)
+  define resolved apply(resolve-s-expression import-set import-set-syntax)
+  if resolved
+    let ((head car(resolved))
+         (tail cdr(resolved)))
+      case head
+        (only)
+          'TODO
+        (except)
+          'TODO
+        (prefix)
+          'TODO
+        (rename)
+          'TODO
+        else
+          lookup-all-imports(import-set)
+    ;; Import sets are not always syntactic s-expressions; they can start with a number.
+    lookup-all-imports(import-set)

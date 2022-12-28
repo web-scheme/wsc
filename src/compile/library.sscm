@@ -1,16 +1,18 @@
-;;* TODO
+;;* Compiler implementation for libraries.
 (define-module (compile library)
   #:export (compile-define-library compile-library-body)
   #:use-module (scheme base)
   #:use-module ((srfi srfi-26) #:select (cut))
-  #:use-module ((compile) #:select (add-import
+  #:use-module ((compile) #:select (add-imports
                                     compiled-module
                                     new-empty-module))
+  #:use-module ((compile import) #:select (lookup-imports))
   #:use-module ((parse env) #:select (bind-syntax!
                                       lookup-variable-or-builtin
                                       make-env))
   #:use-module ((syntax wrap) #:select (unwrap-all-syntax
                                         unwrap-symbol
+                                        unwrap-library-name-part
                                         resolve-s-expression
                                         wrapped-syntax.datum
                                         wrapped-syntax.env))
@@ -18,17 +20,23 @@
   #:use-module ((tools logging) #:select (log-error))
 )
 
-define unwrap-library-name-part(wrapped-part bail)
-  define part wrapped-syntax.datum(wrapped-part)
-  if {symbol?(part) or {exact-integer?(part) and {part >= 0}}}
-    part
-    bail(
-      log-error(
-        "Library name must comprise only identifiers and exact non-negative integers"
-        wrapped-part))
-
-define compile-library-import(import-sets module)
-  add-import(module 'foo 'foo 'foo 'foo 'foo)
+;* Validate and compile an import statement.
+;*
+;* Parameters
+;*   import-sets: '[List] of [wrapped syntax](wrapped-syntax) objects
+;*                 representing import sets.'
+;*   module:       Module being compiled.
+;*
+;* Result
+;*   `#t` on success, or `#f` on failure.
+define compile-library-imports(import-sets module)
+  unless null?(import-sets)
+    let* ((next-set  car(import-sets))
+          (imports   lookup-imports(next-set)))
+      and imports
+          begin
+            add-imports(module imports)
+            compile-library-imports(cdr(import-sets) module)
 
 define compile-library-export(export-specs module)
   'TODO
@@ -59,7 +67,7 @@ define compile-library-body(name body)
               (import)
                 if null?(tail)
                   log-error("Empty import set" declaration)
-                  compile-library-import(tail module)
+                  compile-library-imports(tail module)
               (export)
                 compile-library-export(tail module)
               (begin)

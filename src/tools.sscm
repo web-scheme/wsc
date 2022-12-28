@@ -2,6 +2,7 @@
 (define-module (tools)
   #:export (λ
             collect-list
+            external-rep
             map-improper)
   #:use-module (scheme base)
 )
@@ -71,3 +72,11 @@ define map-improper(proc list1)
     ;; TODO: Avoid traversing the list twice.
     set-cdr!(list-tail(most tail-index) improper-tail)
   most
+
+;* Return the external representation of a Scheme object.
+define external-rep(obj)
+  let ((write-port open-output-string()))
+    write(obj write-port)
+    let ((message get-output-string(write-port)))
+      close-port(write-port)
+      message

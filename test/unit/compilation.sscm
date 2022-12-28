@@ -2,6 +2,7 @@
 
 use-modules
   (compile) #:select (compile-modules compiled-module:new)
+  (compile import) #:select (wasm-import:new)
   (parse env) #:select (make-env bind-syntax!)
   (parse macros) #:select (process-all-macros)
   (syntax wrap) #:select (wrapped-syntax:new wrapped-syntax? unwrap-all-syntax)
@@ -43,7 +44,7 @@ test-compilation "A basic library"
     (begin
      (display "Bonjour, monde")))
   compiled-module:new(
-    '((foo foo (foo foo foo)))
+    list(wasm-import:new("(scheme base)" 'TODO 'TODO 'TODO 'TODO))
     '())
   ()
 

@@ -1,11 +1,12 @@
 ;;* TODO
 (define-module (compile)
-  #:export (add-import
+  #:export (add-imports
             compile-modules
             compiled-module
             compiled-module:new
             new-empty-module)
   #:use-module (scheme base)
+  #:use-module ((compile import) #:select (wasm-import))
   #:use-module ((compile library) #:select (compile-define-library))
   #:use-module ((syntax wrap) #:select (unwrap-symbol
                                         resolve-s-expression
@@ -17,33 +18,23 @@
 define-record-type compiled-module
   compiled-module:new(imports exports)
   compiled-module?
-  ;* List of [imports](https://webassembly.github.io/spec/core/text/modules.html#imports),
-  ;* each being a list consisting of:
-  ;* - module [name](string)
-  ;* - object [name](string)
-  ;* - import description, itself a list consisting of:
-  ;*   - [type](symbol): either `func`, `table`, `memory`, or `global`
-  ;*   - [index](integer) into the TODO
-  ;*   - subtype, itself a list, depending on the type, TODO
+  ;* List of [imports](wasm-import).
   imports compiled-module.imports compiled-module.set-imports!
-  ;* List of [exports](https://webassembly.github.io/spec/core/text/modules.html#exports),
-  ;* each being a list consisting of:
-  ;* - object [name](string)
-  ;* - export description, itself a list consisting of:
-  ;*   - [type](symbol): either `func`, `table`, `memory`, or `global`
-  ;*   - [index](integer) into the TODO
+  ;* List of [exports](wasm-export).
   exports compiled-module.exports compiled-module.set-exports!
 
 ;* Return a new, empty [module](compiled-module).
 define new-empty-module()
   compiled-module:new('() '())
 
-;* TODO
-define add-import(module module-name object-name type index subtype)
+;; TODO: This possibly only exists because exporting `compiled-module.set-imports!`
+;;       and `compiled-module.imports` is wonky in Guile. Consider refactoring.
+define add-imports(module imports)
+  ;; TODO: `append` unnecessarily allocates a new list. Optimize.
   compiled-module.set-imports!(
     module
-    cons(list(module-name object-name list(type index subtype))
-         compiled-module.imports(module)))
+    append(imports
+           compiled-module.imports(module)))
 
 ;* Compile top-level syntax (a datum with no parent).
 ;*

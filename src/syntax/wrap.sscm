@@ -5,10 +5,12 @@
             wrapped-syntax.env wrapped-syntax.filename
             wrapped-syntax.line wrapped-syntax.column wrapped-syntax.prev
             unwrap-all-syntax unwrap-symbol resolve-s-expression
+            unwrap-library-name-part
             fake-wrap)
   #:use-module (scheme base)
   #:use-module ((parse env) #:select (env env-new env.bindings lookup-variable-or-builtin))
   #:use-module ((tools) #:select (map-improper))
+  #:use-module ((tools logging) #:select (log-error))
 )
 
 ;* A datum representing an expression in a Scheme program,
@@ -93,3 +95,22 @@ define resolve-s-expression(syntax . override-bindings)
           env-new(override-bindings wrapped-syntax.env(car(datum)))
           head-id)
         cdr(datum))
+
+;* Unwrap and validate a component of a library name,
+;* which must be either a [symbol] or a non-negative [integer].
+;*
+;* Parameters
+;*   wrapped-part: '[Wrapped syntax](wrapped-syntax) object.'
+;*   bail:          Bailing [function] invoked if `wrapped-part` is invalid,
+;*                  passing the single argument `#f`.
+;*
+;* Result
+;*   The unwrapped component, or the result of `bail` on failure.
+define unwrap-library-name-part(wrapped-part bail)
+  define part wrapped-syntax.datum(wrapped-part)
+  if {symbol?(part) or {exact-integer?(part) and {part >= 0}}}
+    part
+    bail(
+      log-error(
+        "Library name must comprise only identifiers and exact non-negative integers"
+        wrapped-part))
