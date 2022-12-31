@@ -20,6 +20,7 @@
   #:use-module ((tools logging) #:select (log-error))
 )
 
+;; TODO: Re-use this for extra-librarial imports?
 ;* Validate and compile an import statement.
 ;*
 ;* Parameters
@@ -41,8 +42,35 @@ define compile-library-imports(import-sets module)
 define compile-library-export(export-specs module)
   'TODO
 
+;; TODO: Re-use this for extra-librarial begin blocks?
+;* Validate and compile a begin block.
+;*
+;* Parameters
+;*   statements: '[List] of [wrapped syntax](wrapped-syntax) objects
+;*                representing commands or definitions.'
+;*   module:      Module being compiled.
+;*
+;* Result
+;*   `#t` on success, or `#f` on failure.
 define compile-library-begin(statements module)
-  'TODO
+  for-each
+    λ (command-or-definition)
+      define resolved resolve-s-expression(command-or-definition)
+      if resolved
+        let ((head car(resolved))
+             (tail cdr(resolved)))
+          if head
+            case head
+              (define)
+                'TODO
+              (define-values)
+                'TODO
+              (define-record-type)
+                'TODO
+              (begin)
+                ;; TODO: Think about this harder.
+                compile-library-begin(tail module)
+    statements
 
 define library-declaration-syntax
   '((export . export)
@@ -72,6 +100,14 @@ define compile-library-body(name body)
                 compile-library-export(tail module)
               (begin)
                 compile-library-begin(tail module)
+              (include)
+                'TODO
+              (include-ci)
+                'TODO
+              (include-library-declarations)
+                'TODO
+              (cond-expand)
+                'TODO
               else
                 ;; The "declaration" is an s-expression, but not valid.
                 log-error("Invalid library declaration" declaration)

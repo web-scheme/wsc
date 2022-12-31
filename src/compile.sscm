@@ -22,6 +22,8 @@ define-record-type compiled-module
   imports compiled-module.imports compiled-module.set-imports!
   ;* List of [exports](wasm-export).
   exports compiled-module.exports compiled-module.set-exports!
+  ;* List of [functions](wasm-function).
+  functions compiled-module.functions compiled-module.set-functions!
 
 ;* Return a new, empty [module](compiled-module).
 define new-empty-module()

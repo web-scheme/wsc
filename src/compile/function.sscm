@@ -1,0 +1,16 @@
+;;* Compiler implementation for functions.
+(define-module (compile function)
+  #:export (compile-function)
+  #:use-module (scheme base)
+  #:use-module ((compile) #:select (compiled-module))
+  #:use-module ((tools) #:select (λ))
+  #:use-module ((tools logging) #:select (log-error))
+)
+
+;* TODO
+;*
+;* Parameters
+;*
+;* Result
+define compile-function(TODO module)
+  'TODO
