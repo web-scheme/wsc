@@ -3,7 +3,8 @@
   #:export (λ
             collect-list
             external-rep
-            map-improper)
+            map-improper
+            builtin-syntax-list)
   #:use-module (scheme base)
 )
 
@@ -80,3 +81,10 @@ define external-rep(obj)
     let ((message get-output-string(write-port)))
       close-port(write-port)
       message
+
+;* Convenience macro for defining a builtin-syntax binding list,
+;* which is an association list of keywords to themselves.
+define-syntax builtin-syntax-list
+  syntax-rules ()
+    (builtin-syntax-list keyword ...)
+      '((keyword . keyword) ...)

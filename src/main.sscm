@@ -64,7 +64,7 @@ write(compile-modules(map(test-wrap (quote (
   (define-library (a b c 2 3 d)
     (import (scheme base))
     (begin
-     (display "Bonjour, monde")))
+      (display "Bonjour, monde")))
 )))))
 newline()
 newline()

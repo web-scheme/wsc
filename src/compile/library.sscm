@@ -1,6 +1,6 @@
 ;;* Compiler implementation for libraries.
 (define-module (compile library)
-  #:export (compile-define-library compile-library-body)
+  #:export (compile-define-library)
   #:use-module (scheme base)
   #:use-module ((srfi srfi-26) #:select (cut))
   #:use-module ((compile) #:select (add-imports
@@ -13,14 +13,14 @@
   #:use-module ((syntax wrap) #:select (unwrap-all-syntax
                                         unwrap-symbol
                                         unwrap-library-name-part
-                                        resolve-s-expression
+                                        switch-s-expr
                                         wrapped-syntax.datum
                                         wrapped-syntax.env))
-  #:use-module ((tools) #:select (λ))
-  #:use-module ((tools logging) #:select (log-error))
+  #:use-module ((tools) #:select (λ builtin-syntax-list))
+  #:use-module ((tools logging) #:select (log-error log-warning))
 )
 
-;; TODO: Re-use this for extra-librarial imports?
+;; TODO: Re-use this for extralibrarial imports?
 ;* Validate and compile an import statement.
 ;*
 ;* Parameters
@@ -39,84 +39,83 @@ define compile-library-imports(import-sets module)
             add-imports(module imports)
             compile-library-imports(cdr(import-sets) module)
 
-define compile-library-export(export-specs module)
+define compile-library-exports(export-specs module)
   'TODO
 
 ;; TODO: Re-use this for extra-librarial begin blocks?
 ;* Validate and compile a begin block.
 ;*
 ;* Parameters
-;*   statements: '[List] of [wrapped syntax](wrapped-syntax) objects
-;*                representing commands or definitions.'
-;*   module:      Module being compiled.
+;*   statements:   '[List] of [wrapped syntax](wrapped-syntax) objects
+;*                  representing commands or definitions.'
+;*   module:        Module being compiled.
+;*   allow-define:  `#t` if definitions are still allowed,
+;*                  `#f` if only commands are allowed.
 ;*
 ;* Result
 ;*   `#t` on success, or `#f` on failure.
-define compile-library-begin(statements module)
-  for-each
-    λ (command-or-definition)
-      define resolved resolve-s-expression(command-or-definition)
-      if resolved
-        let ((head car(resolved))
-             (tail cdr(resolved)))
-          if head
-            case head
-              (define)
-                'TODO
-              (define-values)
-                'TODO
-              (define-record-type)
-                'TODO
-              (begin)
-                ;; TODO: Think about this harder.
-                compile-library-begin(tail module)
-    statements
+define compile-library-begin(statements allow-define module)
+  if null?(statements)
+    #t
+    switch-s-expr car(statements) head tail '()
+      'define-syntax
+        '()  ; Ignore because macros are already expanded.
+      'define
+        compile-library-define(tail module)
+      'define-values
+        compile-library-define-values(tail module)
+      'define-record-type
+        compile-library-define-record-type(tail module)
+      'begin
+        compile-library-begin(tail allow-define module)
+      OTHER
+        set! allow-define #f
+        compile-start-invocation(head tail module)
+      UNBOUND
+        log-error("Unbound variable" car(wrapped-syntax.datum(car(statements))))
+      ATOM
+        log-warning("Dangling atom" car(statements))
+      THEN
+        compile-library-begin(cdr(statements) allow-define module)
 
 define library-declaration-syntax
-  '((export . export)
-    (import . import)
-    (begin . begin)
-    (include . include)
-    (include-ci . include-ci)
-    (include-library-declarations . include-library-declarations)
-    (cond-expand . cond-expand))
+  builtin-syntax-list
+    export
+    import
+    begin
+    include
+    include-ci
+    include-library-declarations
+    cond-expand
 
-define compile-library-body(name body)
-  define module new-empty-module()
-  for-each
-    λ (declaration)
-      define resolved
-        apply(resolve-s-expression declaration library-declaration-syntax)
-      if resolved
-        let ((head car(resolved))
-             (tail cdr(resolved)))
-          if head
-            case head
-              (import)
-                if null?(tail)
-                  log-error("Empty import set" declaration)
-                  compile-library-imports(tail module)
-              (export)
-                compile-library-export(tail module)
-              (begin)
-                compile-library-begin(tail module)
-              (include)
-                'TODO
-              (include-ci)
-                'TODO
-              (include-library-declarations)
-                'TODO
-              (cond-expand)
-                'TODO
-              else
-                ;; The "declaration" is an s-expression, but not valid.
-                log-error("Invalid library declaration" declaration)
-            log-error("Unbound variable"
-                      car(wrapped-syntax.datum(declaration)))
-        ;; The "declaration" is *not* an s-expression.
-        log-error("Invalid library declaration" declaration)
-    body
-  module
+define compile-library-body(name body module)
+  if null?(body)
+    module
+    switch-s-expr car(body) head tail library-declaration-syntax
+      'export
+        compile-library-exports(tail module)
+      'import
+        if null?(tail)
+          log-error("Empty import declaration" car(body))
+          compile-library-imports(tail module)
+      'begin
+        compile-library-begin(tail #t module)
+      'include
+        'FOOT
+      'include-ci
+        'BAR
+      'include-library-declarations
+        'BAZ
+      'cond-expand
+        'RAZ
+      OTHER
+        log-error("Invalid library declaration" car(body))
+      UNBOUND
+        log-error("Unbound variable" car(wrapped-syntax.datum(car(body))))
+      ATOM
+        log-error("Invalid library declaration" car(body))
+      THEN
+        compile-library-body(name cdr(body) module)
 
 ;* Compile a library definition into a [WASM module](compiled-module).
 ;*
@@ -134,5 +133,6 @@ define compile-define-library(name-and-body)
       if list?(name)
         compile-library-body(
           map((cut unwrap-library-name-part <> bail) name)
-          cdr(name-and-body))
+          cdr(name-and-body)
+          new-empty-module())
         bail(log-error("Library name must be a list" wrapped-name))

@@ -4,12 +4,12 @@
             wrapped-syntax.datum wrapped-syntax.set-datum!
             wrapped-syntax.env wrapped-syntax.filename
             wrapped-syntax.line wrapped-syntax.column wrapped-syntax.prev
-            unwrap-all-syntax unwrap-symbol resolve-s-expression
+            unwrap-all-syntax unwrap-symbol switch-s-expr
             unwrap-library-name-part
             fake-wrap)
   #:use-module (scheme base)
   #:use-module ((parse env) #:select (env env-new env.bindings lookup-variable-or-builtin))
-  #:use-module ((tools) #:select (map-improper))
+  #:use-module ((tools) #:select (λ map-improper))
   #:use-module ((tools logging) #:select (log-error))
 )
 
@@ -18,19 +18,31 @@
 ;* such as source file name and line number.
 define-record-type wrapped-syntax
   wrapped-syntax:new(datum env filename line column prev)
-  wrapped-syntax?
+  _wrapped-syntax?
   ;* Wrapped object.
   datum wrapped-syntax.datum wrapped-syntax.set-datum!
   ;* [Environment](env) in which `datum` exists.
   env wrapped-syntax.env
   ;* Original [filename](string) in which `datum` appeared.
-  filename wrapped-syntax.filename
+  filename _wrapped-syntax.filename
   ;* Line [number](integer) of original appearance.
-  line wrapped-syntax.line
+  line _wrapped-syntax.line
   ;* Column [number](integer) of original appearance.
-  column wrapped-syntax.column
+  column _wrapped-syntax.column
   ;* Previous version of the [wrapped object](wrapped-syntax) if macro expansion occurred.
-  prev wrapped-syntax.prev
+  prev _wrapped-syntax.prev
+
+;; TODO: Guile struggles to export record type generated functions
+define wrapped-syntax?(obj)
+  _wrapped-syntax?(obj)
+define wrapped-syntax.filename(obj)
+  _wrapped-syntax.filename(obj)
+define wrapped-syntax.line(obj)
+  _wrapped-syntax.line(obj)
+define wrapped-syntax.column(obj)
+  _wrapped-syntax.column(obj)
+define wrapped-syntax.prev(obj)
+  _wrapped-syntax.prev(obj)
 
 ;; Return fake wrapped syntax objects as a stopgap until a real parser is implemented.
 define fake-wrap(datum env filename)
@@ -85,7 +97,7 @@ define unwrap-symbol(syntax)
 ;*
 ;*   and the tail is the untouched tail of `syntax`.
 ;*   Otherwise, return `#f`.
-define resolve-s-expression(syntax . override-bindings)
+define resolve-s-expr(syntax . override-bindings)
   define datum    wrapped-syntax.datum(syntax)
   define head-id  (and pair?(datum)
                        unwrap-symbol(car(datum)))
@@ -95,6 +107,31 @@ define resolve-s-expression(syntax . override-bindings)
           env-new(override-bindings wrapped-syntax.env(car(datum)))
           head-id)
         cdr(datum))
+
+define-syntax switch-s-expr
+  syntax-rules (OTHER UNBOUND ATOM THEN)
+    (switch-s-expr maybe-s-expr head-binding tail-binding keyword-overrides
+                   (builtin-keyword builtin-case ...) ...
+                   (OTHER location-case ...)
+                   (UNBOUND unbound-case ...)
+                   (ATOM atom-case ...)
+                   (THEN tail-statements ...))
+      let ((resolved apply(resolve-s-expr maybe-s-expr keyword-overrides)))
+        if resolved
+          let ((head-binding car(resolved))
+               (tail-binding cdr(resolved)))
+            if head-binding
+              cond
+                eq?(head-binding builtin-keyword)
+                  builtin-case \\ ...
+                ...
+                else
+                  location-case \\ ...
+              begin
+                unbound-case \\ ...
+          begin
+            atom-case \\ ...
+        tail-statements \\ ...
 
 ;* Unwrap and validate a component of a library name,
 ;* which must be either a [symbol] or a non-negative [integer].

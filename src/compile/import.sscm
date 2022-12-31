@@ -3,25 +3,23 @@
   #:export (lookup-imports wasm-import wasm-import:new)
   #:use-module (scheme base)
   #:use-module ((srfi srfi-26) #:select (cut))
-  #:use-module ((syntax wrap) #:select (resolve-s-expression
+  #:use-module ((syntax wrap) #:select (switch-s-expr
                                         wrapped-syntax.datum
                                         unwrap-library-name-part))
-  #:use-module ((tools) #:select (λ external-rep))
+  #:use-module ((tools) #:select (λ external-rep builtin-syntax-list))
   #:use-module ((tools logging) #:select (log-error))
 )
 
 ;* A [Wasm import](https://webassembly.github.io/spec/core/text/modules.html#imports).
 define-record-type wasm-import
-  wasm-import:new(module name kind type index)
+  wasm-import:new(module name description index)
   wasm-import?
   ;* Module [name](string).
   module wasm-import.module
   ;* [Name](string) of imported object.
   name wasm-import.name
-  ;* [Kind](symbol): either `func`, `table`, `memory`, or `global`.
-  kind wasm-import.kind
-  ;* Wasm type of the object, depending on `kind`.
-  type wasm-import.type
+  ;* Wasm [import description](https://webassembly.github.io/spec/core/text/modules.html#text-importdesc).
+  description wasm-import.description
   ;* [Index](integer) into the TODO.
   index wasm-import.index
 
@@ -41,15 +39,21 @@ define lookup-all-imports(library-name)
     λ (bail)
       if list?(name)
         let ((module-name external-rep(map((cut unwrap-library-name-part <> bail) name))))
-          list(wasm-import:new(module-name 'TODO 'TODO 'TODO 'TODO))
+          list(
+            wasm-import:new(
+              substring(module-name 1 {string-length(module-name) - 1})
+              "display"
+              '(func (param externref) (result externref))
+              'TODO))
         bail(log-error("Library name must be a list" wrapped-name))
 
 ;* Built-in syntax for import sets.
 define import-set-syntax
-  '((only . only)
-    (except . except)
-    (prefix . prefix)
-    (rename . rename))
+  builtin-syntax-list
+    only
+    except
+    prefix
+    rename
 
 ;* Look up a [library dependency](TODO: Link to help page describing search paths etc.)
 ;* and return the objects exported by that dependency
@@ -62,20 +66,20 @@ define import-set-syntax
 ;*   List of [imports](wasm-import),
 ;*   or `#f` if the import set is invalid or the library cannot be found.
 define lookup-imports(import-set)
-  define resolved apply(resolve-s-expression import-set import-set-syntax)
-  if resolved
-    let ((head car(resolved))
-         (tail cdr(resolved)))
-      case head
-        (only)
-          'TODO
-        (except)
-          'TODO
-        (prefix)
-          'TODO
-        (rename)
-          'TODO
-        else
-          lookup-all-imports(import-set)
-    ;; Import sets are not always syntactic s-expressions; they can start with a number.
-    lookup-all-imports(import-set)
+  switch-s-expr import-set head tail import-set-syntax
+    'only
+      'TODO
+    'except
+      'TODO
+    'prefix
+      'TODO
+    'rename
+      'TODO
+    OTHER
+      lookup-all-imports(import-set)
+    UNBOUND
+      lookup-all-imports(import-set)
+    ATOM
+      ;; Import sets are not always syntactic s-expressions; they can start with a number.
+      lookup-all-imports(import-set)
+    (THEN)

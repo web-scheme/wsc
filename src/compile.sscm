@@ -9,7 +9,7 @@
   #:use-module ((compile import) #:select (wasm-import))
   #:use-module ((compile library) #:select (compile-define-library))
   #:use-module ((syntax wrap) #:select (unwrap-symbol
-                                        resolve-s-expression
+                                        switch-s-expr
                                         wrapped-syntax.datum))
   #:use-module ((tools logging) #:select (log-error))
 )
@@ -47,36 +47,29 @@ define add-imports(module imports)
 ;*   Either a [module](compiled-module),
 ;*   or a TODO
 define compile-top-level(syntax)
-  define resolved resolve-s-expression(syntax)
-  if resolved
-    let ((head car(resolved))
-         (tail cdr(resolved)))
-      if head
-        if symbol?(head)
-          ;; Symbol means built-in syntax.
-          case head
-            (define)
-              if null?(tail)
-                log-error("Empty definition" syntax)
-                1  ; TODO
-            (define-library)
-              if null?(tail)
-                log-error("Empty library definition" syntax)
-                compile-define-library(tail)
-            (define-syntax)
-              if null?(tail)
-                log-error("Empty syntax definition" syntax)
-                3  ; TODO
-          ;; `head` must be a [location].
-          4  ; TODO
-        ;; `syntax` is an s-expression but the head is unbound.
-        log-error("Unbound variable"
-                  car(wrapped-syntax.datum(syntax)))
-    begin
+  switch-s-expr syntax head tail '()
+    'define
+      if null?(tail)
+        log-error("Empty definition" syntax)
+        1  ; TODO
+    'define-library
+      if null?(tail)
+        log-error("Empty library definition" syntax)
+        compile-define-library(tail)
+    'define-syntax
+      if null?(tail)
+        log-error("Empty syntax definition" syntax)
+        3  ; TODO
+    OTHER
+      'TODO
+    UNBOUND
+      log-error("Unbound variable" car(wrapped-syntax.datum(syntax)))
+    ATOM
       set! resolved unwrap-symbol(syntax)
       if resolved
         5  ; TODO
         6  ; TODO
+    (THEN)
 
 ;* Compile a list of top-level syntax.
 ;*

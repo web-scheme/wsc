@@ -44,7 +44,11 @@ test-compilation "A basic library"
     (begin
      (display "Bonjour, monde")))
   compiled-module:new(
-    list(wasm-import:new("(scheme base)" 'TODO 'TODO 'TODO 'TODO))
+    list(
+      wasm-import:new(
+        "scheme base" "display"
+        '(func (param externref) (result externref))
+        'TODO))
     '())
   ()
 
