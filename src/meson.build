@@ -1,4 +1,4 @@
-s_lang = custom_target('s-lang',
+s_lang = custom_target('wsc',
                        build_by_default: true,
                        input: unsweet.process('main.sscm',
                                               'compile.sscm',
@@ -14,4 +14,4 @@ s_lang = custom_target('s-lang',
                                               preserve_path_from: meson.current_source_dir()),
                        # List all files as input but only pass the entrypoint to the command.
                        command: [guile, '--r7rs', '--no-auto-compile', '@INPUT0@'],
-                       output: 's-lang.wasm')
+                       output: 'wsc.wasm')

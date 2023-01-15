@@ -1,6 +1,6 @@
 # Libraries
 
-Implementations for s-lang's built-in libraries.
+Implementations for WSC's built-in libraries.
 
 Each library is defined by a Meson subproject.
 The hypothetical library `(a b c)` would exist in the subdirectory `a/b/c/`,
