@@ -2,6 +2,7 @@
 
 use-modules
   (compile) #:select (compile-modules compiled-module:new)
+  (compile define) #:select (wasm-global:new)
   (compile import) #:select (wasm-import:new)
   (parse env) #:select (make-env bind-syntax!)
   (parse macros) #:select (process-all-macros)
@@ -13,6 +14,7 @@ define test-env '()
 
 before-each
   set!(test-env make-env('()))
+  bind-syntax!(test-env 'define 'define)
   bind-syntax!(test-env 'define-syntax 'define-syntax)
   bind-syntax!(test-env 'define-library 'define-library)
 
@@ -42,12 +44,19 @@ test-compilation "A basic library"
   (define-library (a b c 2 3 d)
     (import (scheme base))
     (begin
-     (display "Bonjour, monde")))
+      (define x 5)
+      ;(define (foo x) (* x x))
+      (display "Bonjour, monde")))
   compiled-module:new(
     list(
       wasm-import:new(
         "scheme base" "display"
         '(func (param externref) (result externref))
+        'TODO))
+    '()
+    list(
+      wasm-global:new(
+        'x
         'TODO))
     '())
   ()

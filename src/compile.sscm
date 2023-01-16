@@ -1,6 +1,7 @@
 ;;* TODO
 (define-module (compile)
   #:export (add-imports
+            add-global
             compile-modules
             compiled-module
             compiled-module:new
@@ -16,18 +17,20 @@
 
 ;* Self-contained WASM module.
 define-record-type compiled-module
-  compiled-module:new(imports exports)
+  compiled-module:new(imports exports globals functions)
   compiled-module?
   ;* List of [imports](wasm-import).
   imports compiled-module.imports compiled-module.set-imports!
   ;* List of [exports](wasm-export).
   exports compiled-module.exports compiled-module.set-exports!
+  ;* List of [globals](wasm-global).
+  globals compiled-module.globals compiled-module.set-globals!
   ;* List of [functions](wasm-function).
   functions compiled-module.functions compiled-module.set-functions!
 
 ;* Return a new, empty [module](compiled-module).
 define new-empty-module()
-  compiled-module:new('() '())
+  compiled-module:new('() '() '() '())
 
 ;; TODO: This possibly only exists because exporting `compiled-module.set-imports!`
 ;;       and `compiled-module.imports` is wonky in Guile. Consider refactoring.
@@ -37,6 +40,12 @@ define add-imports(module imports)
     module
     append(imports
            compiled-module.imports(module)))
+
+define add-global(module global)
+  compiled-module.set-globals!(
+    module
+    cons(global
+         compiled-module.globals(module)))
 
 ;* Compile top-level syntax (a datum with no parent).
 ;*

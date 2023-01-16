@@ -6,6 +6,7 @@
   #:use-module ((compile) #:select (add-imports
                                     compiled-module
                                     new-empty-module))
+  #:use-module ((compile define) #:select (compile-define))
   #:use-module ((compile import) #:select (lookup-imports))
   #:use-module ((parse env) #:select (bind-syntax!
                                       lookup-variable-or-builtin
@@ -61,11 +62,13 @@ define compile-library-begin(statements allow-define module)
       'define-syntax
         '()  ; Ignore because macros are already expanded.
       'define
-        compile-library-define(tail module)
+        if null?(tail)
+          log-error("Empty definition" car(statements))
+          compile-define(tail module)
       'define-values
-        compile-library-define-values(tail module)
+        compile-define-values(tail module)
       'define-record-type
-        compile-library-define-record-type(tail module)
+        compile-define-record-type(tail module)
       'begin
         compile-library-begin(tail allow-define module)
       OTHER

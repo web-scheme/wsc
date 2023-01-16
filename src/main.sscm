@@ -43,27 +43,25 @@ use-modules
   (syntax wrap) #:select (wrapped-syntax:new wrapped-syntax? unwrap-all-syntax)
   (tools) #:select (λ map-improper)
 
-define test-env make-env('())
-bind-syntax!(test-env 'define-syntax 'define-syntax)
-bind-syntax!(test-env 'define-library 'define-library)
-
 define test-wrap(datum)
   cond
     pair?(datum)    wrapped-syntax:new(
                       map-improper(test-wrap datum)
-                      test-env "nom de fichier" 4 20 '())
+                      root-env "nom de fichier" 4 20 '())
     vector?(datum)  wrapped-syntax:new(
                       vector-map(test-wrap datum)
-                      test-env "nom de fichier" 4 20 '())
+                      root-env "nom de fichier" 4 20 '())
     else            wrapped-syntax:new(
                       datum
-                      test-env "nom de fichier" 4 20 '())
+                      root-env "nom de fichier" 4 20 '())
 
 newline()
 write(compile-modules(map(test-wrap (quote (
   (define-library (a b c 2 3 d)
     (import (scheme base))
     (begin
+      (define x 5)
+      ;(define (foo x) (* x x))
       (display "Bonjour, monde")))
 )))))
 newline()
