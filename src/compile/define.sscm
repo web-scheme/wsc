@@ -1,32 +1,25 @@
 ;;* Compiler implementation for function and variable definitions.
 (define-module (compile define)
-  #:export (compile-define wasm-global:new)
+  #:export (compile-define)
   #:use-module (scheme base)
-  #:use-module ((compile) #:select (add-global))
+  #:use-module ((compile) #:select (add-globals))
   #:use-module ((syntax wrap) #:select (switch-s-expr
                                         wrapped-syntax.datum))
   #:use-module ((tools) #:select (λ))
   #:use-module ((tools logging) #:select (log-error))
 )
 
-;* A global variable in a Wasm module.
-define-record-type wasm-global
-  wasm-global:new(name init)
-  wasm-global
-  ;* [Name](symbol) of the global variable as written in the Scheme code.
-  name wasm-global.name
-  ;* Initial [value](TODO) of the global variable.
-  init wasm-global.init
-
 define compile-define-variable(wrapped-head head body module)
-  add-global(
+  ;; TODO: Something real.
+  add-globals(
     module
-    wasm-global:new(head 'TODO))
+    `(global $*x (export "x") anyref (i32.const 5)))
 
 define compile-define-function(wrapped-head head body module)
-  add-global(
+  ;; TODO: Something real.
+  add-globals(
     module
-    wasm-global:new(head 'TODO))
+    `(global $*foo (export "foo") anyref (ref.func 1)))
 
 define compile-define(head-and-body module)
   define wrapped-head car(head-and-body)

@@ -2,15 +2,22 @@
 (define-module (compile function)
   #:export (compile-function)
   #:use-module (scheme base)
-  #:use-module ((compile) #:select (compiled-module))
+  #:use-module ((compile) #:select (wasm-module))
   #:use-module ((tools) #:select (λ))
   #:use-module ((tools logging) #:select (log-error))
 )
 
-;* TODO
+define transpile-param(parameter)
+  `(param anyref)
+
+;* Compile an anonymous Scheme function and add it to `module`.
 ;*
 ;* Parameters
+;*   params-and-body: '[List] with a [wrapped](wrapped-syntax) parameter [list] as a head
+;*                     and wrapped body instructions as a tail.'
 ;*
 ;* Result
-define compile-function(TODO module)
+;*   The new function's unique [ID](integer),
+;*   or `#f` if the function fails to compile.
+define compile-function(params-and-body module)
   'TODO

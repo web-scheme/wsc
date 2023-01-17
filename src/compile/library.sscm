@@ -4,7 +4,7 @@
   #:use-module (scheme base)
   #:use-module ((srfi srfi-26) #:select (cut))
   #:use-module ((compile) #:select (add-imports
-                                    compiled-module
+                                    wasm-module
                                     new-empty-module))
   #:use-module ((compile define) #:select (compile-define))
   #:use-module ((compile import) #:select (lookup-imports))
@@ -37,7 +37,7 @@ define compile-library-imports(import-sets module)
           (imports   lookup-imports(next-set)))
       and imports
           begin
-            add-imports(module imports)
+            apply(add-imports module imports)
             compile-library-imports(cdr(import-sets) module)
 
 define compile-library-exports(export-specs module)
@@ -120,13 +120,13 @@ define compile-library-body(name body module)
       THEN
         compile-library-body(name cdr(body) module)
 
-;* Compile a library definition into a [WASM module](compiled-module).
+;* Compile a library definition into a [WASM module](wasm-module).
 ;*
 ;* Parameters
 ;*   name-and-body:  List containing at least one item.
 ;*
 ;* Result
-;*   Compiled [WASM module](compiled-module).
+;*   Compiled [WASM module](wasm-module).
 define compile-define-library(name-and-body)
   ;; [https://web-scheme.org/r7rs-small.pdf#subsection.7.1.7]
   define wrapped-name car(name-and-body)

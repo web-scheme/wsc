@@ -1,9 +1,7 @@
 ;;* Unit tests for compilation from wrapped syntax to compiled modules.
 
 use-modules
-  (compile) #:select (compile-modules compiled-module:new)
-  (compile define) #:select (wasm-global:new)
-  (compile import) #:select (wasm-import:new)
+  (compile) #:select (compile-modules wasm-module:new)
   (parse env) #:select (make-env bind-syntax!)
   (parse macros) #:select (process-all-macros)
   (syntax wrap) #:select (wrapped-syntax:new wrapped-syntax? unwrap-all-syntax)
@@ -34,31 +32,41 @@ define test-wrap(datum)
 
 define-syntax test-compilation
   syntax-rules ()
-    (test-compilation description top-level-data ... expected-executable (expected-libraries ...))
+    (test-compilation description (top-level-data ...) expected-libraries ...)
       test description
         assert-equal(
           compile-modules(map(test-wrap (quote (top-level-data ...))))
-          (list expected-executable expected-libraries ...))
+          (list expected-libraries ...))
 
 test-compilation "A basic library"
-  (define-library (a b c 2 3 d)
-    (import (scheme base))
-    (begin
-      (define x 5)
-      ;(define (foo x) (* x x))
-      (display "Bonjour, monde")))
-  compiled-module:new(
-    list(
-      wasm-import:new(
-        "scheme base" "display"
-        '(func (param externref) (result externref))
-        'TODO))
+  ((define-library (a b c 2 3 d)
+     (export x foo)
+     (import (scheme base))
+     (begin
+       (define x 5)
+       (define (foo x) (* x x))
+       (display "Bonjour, monde"))))
+  wasm-module:new(
+    #()
+    #((import $*display "scheme base" "display" anyref)
+      );(import $** "scheme base" "*" anyref))
+    ; First function is the starting function.
+    ;#((func
+    ;    (return_call_indirect (param anyref) (result anyref)
+    ;      (i32.const 0)))
+    ;  (func (param $x anyref) (result anyref)
+    ;    (return_call_indirect (param anyref) (param anyref) (result anyref)
+    ;      (i32.const 1))))
+    #()
+    ;#((table anyref (elem $*display $**)))
+    #()
+    #()
+    #((global $*x (export "x") anyref (i32.const 5))
+      (global $*foo (export "foo") anyref (ref.func 1)))
+    #()
+    ;'(start 0)
     '()
-    list(
-      wasm-global:new(
-        'x
-        'TODO))
-    '())
-  ()
+    #()
+    #())
 
 run-tests()

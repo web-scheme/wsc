@@ -1,13 +1,12 @@
 ;;* TODO
 (define-module (compile)
   #:export (add-imports
-            add-global
+            add-globals
             compile-modules
-            compiled-module
-            compiled-module:new
-            new-empty-module)
+            new-empty-module
+            wasm-module
+            wasm-module:new)
   #:use-module (scheme base)
-  #:use-module ((compile import) #:select (wasm-import))
   #:use-module ((compile library) #:select (compile-define-library))
   #:use-module ((syntax wrap) #:select (unwrap-symbol
                                         switch-s-expr
@@ -15,37 +14,55 @@
   #:use-module ((tools logging) #:select (log-error))
 )
 
-;* Self-contained WASM module.
-define-record-type compiled-module
-  compiled-module:new(imports exports globals functions)
-  compiled-module?
-  ;* List of [imports](wasm-import).
-  imports compiled-module.imports compiled-module.set-imports!
-  ;* List of [exports](wasm-export).
-  exports compiled-module.exports compiled-module.set-exports!
-  ;* List of [globals](wasm-global).
-  globals compiled-module.globals compiled-module.set-globals!
-  ;* List of [functions](wasm-function).
-  functions compiled-module.functions compiled-module.set-functions!
+;* An abstract Wasm module.
+;* Each field is a module section;
+;* generally a vector of Scheme data representing module-level Wasm instructions in
+;* [text format](https://webassembly.github.io/spec/core/text/index.html).
+define-record-type wasm-module
+  wasm-module:new(types imports functions tables memories globals exports start elements data)
+  wasm-module?
+  ;* Vector of [types](https://webassembly.github.io/spec/core/text/types.html).
+  types wasm-module.types wasm-module.set-types!
+  ;* Vector of [imports](https://webassembly.github.io/spec/core/text/modules.html#imports).
+  imports wasm-module.imports wasm-module.set-imports!
+  ;* Vector of [functions](https://webassembly.github.io/spec/core/text/modules.html#functions).
+  functions wasm-module.functions wasm-module.set-functions!
+  ;* Vector of [tables](https://webassembly.github.io/spec/core/text/modules.html#tables).
+  tables wasm-module.tables wasm-module.set-tables!
+  ;* Vector of [memories](https://webassembly.github.io/spec/core/text/modules.html#memories).
+  memories wasm-module.memories wasm-module.set-memories!
+  ;* Vector of [globals](https://webassembly.github.io/spec/core/text/modules.html#globals).
+  globals wasm-module.globals wasm-module.set-globals!
+  ;* Vector of [exports](https://webassembly.github.io/spec/core/text/modules.html#exports).
+  exports wasm-module.exports wasm-module.set-exports!
+  ;* [Start function](https://webassembly.github.io/spec/core/text/modules.html#start-function) ID
+  ;* or null.
+  start wasm-module.start wasm-module.set-start!
+  ;* Vector of [elements](https://webassembly.github.io/spec/core/text/modules.html#element-segments).
+  elements wasm-module.elements wasm-module.set-elements!
+  ;* Vector of [data](https://webassembly.github.io/spec/core/text/modules.html#data-segments).
+  data wasm-module.data wasm-module.set-data!
 
-;* Return a new, empty [module](compiled-module).
+;* Return a new, empty [module](wasm-module).
 define new-empty-module()
-  compiled-module:new('() '() '() '())
+  wasm-module:new(#() #() #() #() #() #() #() '() #() #())
 
-;; TODO: This possibly only exists because exporting `compiled-module.set-imports!`
-;;       and `compiled-module.imports` is wonky in Guile. Consider refactoring.
-define add-imports(module imports)
-  ;; TODO: `append` unnecessarily allocates a new list. Optimize.
-  compiled-module.set-imports!(
+;; TODO: Make sure to automatically inline the case
+;;       where `add-imports` is called with a known number of parameters
+;;       which are then passed to `apply`.
+define add-imports(module . imports)
+  ;; TODO: `vector-append` unnecessarily allocates a new vector.
+  ;;       Optimize here and elsewhere.
+  wasm-module.set-imports!(
     module
-    append(imports
-           compiled-module.imports(module)))
+    vector-append(wasm-module.imports(module)
+                  apply(vector imports)))
 
-define add-global(module global)
-  compiled-module.set-globals!(
+define add-globals(module . globals)
+  wasm-module.set-globals!(
     module
-    cons(global
-         compiled-module.globals(module)))
+    vector-append(wasm-module.globals(module)
+                  apply(vector globals)))
 
 ;* Compile top-level syntax (a datum with no parent).
 ;*
@@ -53,7 +70,7 @@ define add-global(module global)
 ;*   syntax: '[wrapped syntax](wrapped-syntax) object'
 ;*
 ;* Result
-;*   Either a [module](compiled-module),
+;*   Either a [module](wasm-module),
 ;*   or a TODO
 define compile-top-level(syntax)
   switch-s-expr syntax head tail '()
@@ -86,7 +103,7 @@ define compile-top-level(syntax)
 ;*   wrapped-data:  List of [wrapped syntax](wrapped-syntax) objects.
 ;*
 ;* Result
-;*   List of [modules](compiled-module),
+;*   List of [modules](wasm-module),
 ;*   where the head of the list is an executable module
 ;*   comprised of the Scheme code not enclosed in a library,
 ;*   and any subsequent modules are importable libraries.

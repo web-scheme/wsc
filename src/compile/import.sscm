@@ -1,6 +1,6 @@
 ;;* Import set parsing and library lookup.
 (define-module (compile import)
-  #:export (lookup-imports wasm-import wasm-import:new)
+  #:export (lookup-imports)
   #:use-module (scheme base)
   #:use-module ((srfi srfi-26) #:select (cut))
   #:use-module ((syntax wrap) #:select (switch-s-expr
@@ -10,19 +10,6 @@
   #:use-module ((tools logging) #:select (log-error))
 )
 
-;* A [Wasm import](https://webassembly.github.io/spec/core/text/modules.html#imports).
-define-record-type wasm-import
-  wasm-import:new(module name description index)
-  wasm-import?
-  ;* Module [name](string).
-  module wasm-import.module
-  ;* [Name](string) of imported object.
-  name wasm-import.name
-  ;* Wasm [import description](https://webassembly.github.io/spec/core/text/modules.html#text-importdesc).
-  description wasm-import.description
-  ;* [Index](integer) into the TODO.
-  index wasm-import.index
-
 ;* Look up a [library dependency](TODO: Link to help page describing search paths etc.)
 ;* and return all objects exported by that dependency,
 ;* for import into the compiling module.
@@ -31,7 +18,7 @@ define-record-type wasm-import
 ;*   library-name: '[Wrapped syntax](wrapped-syntax) representing a library name.'
 ;*
 ;* Result
-;*   List of [imports](wasm-import),
+;*   List of [imports](https://webassembly.github.io/spec/core/text/modules.html#imports),
 ;*   or `#f` if the import set is invalid or the library cannot be found.
 define lookup-all-imports(library-name)
   define name wrapped-syntax.datum(library-name)
@@ -40,11 +27,11 @@ define lookup-all-imports(library-name)
       if list?(name)
         let ((module-name external-rep(map((cut unwrap-library-name-part <> bail) name))))
           list(
-            wasm-import:new(
-              substring(module-name 1 {string-length(module-name) - 1})
-              "display"
-              '(func (param externref) (result externref))
-              'TODO))
+            `(import
+               $*display
+               ,substring(module-name 1 {string-length(module-name) - 1})
+               "display"
+               anyref))
         bail(log-error("Library name must be a list" wrapped-name))
 
 ;* Built-in syntax for import sets.
@@ -63,7 +50,7 @@ define import-set-syntax
 ;*   import-set: '[Wrapped syntax](wrapped-syntax) representing an import set.'
 ;*
 ;* Result
-;*   List of [imports](wasm-import),
+;*   List of [imports](https://webassembly.github.io/spec/core/text/modules.html#imports),
 ;*   or `#f` if the import set is invalid or the library cannot be found.
 define lookup-imports(import-set)
   switch-s-expr import-set head tail import-set-syntax
@@ -82,4 +69,4 @@ define lookup-imports(import-set)
     ATOM
       ;; Import sets are not always syntactic s-expressions; they can start with a number.
       lookup-all-imports(import-set)
-    (THEN)
+    (THEN)  ;; Use an empty THEN block to return the value of the switch case.
