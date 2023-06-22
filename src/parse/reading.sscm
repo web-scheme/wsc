@@ -8,10 +8,10 @@
 
 ;;* Read Scheme data from a textual input port until EOF.
 ;;*
-;;* Parameters:
+;;* Parameters
 ;;*   port:  Textual input port to read from.
 ;;*
-;;* Result:
+;;* Result
 ;;*   List of wrapped syntax objects containing the data.
 define read-all-wrapped(port root-env filename)
   collect-list((λ () fake-wrap(read(port) root-env filename))

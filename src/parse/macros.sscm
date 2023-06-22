@@ -35,10 +35,10 @@ define-record-type transformer
 
 ;;* Check for errors and simplify a single macro rule.
 ;;*
-;;* Parameters:
+;;* Parameters
 ;;*   wrapped-rule:  A single syntax rule, as a [wrapped-syntax] object.
 ;;*
-;;* Result:
+;;* Result
 ;;*   The same rule recursively unwrapped and converted from a doubleton list to a pair.
 define unwrap-macro-rule(wrapped-rule)
   match wrapped-rule
@@ -51,12 +51,12 @@ define unwrap-macro-rule(wrapped-rule)
 
 ;;* Check for errors and define a macro.
 ;;*
-;;* Parameters:
+;;* Parameters
 ;;*   wrapped-datum:  Overall syntax definition code, as a [wrapped-syntax] object.
 ;;*   env:            Environment to define the macro in.
 ;;*   tail:           Tail of [wrapped-syntax] objects following `define-syntax`.
 ;;*
-;;* Result:
+;;* Result
 ;;*   The same rule recursively unwrapped and converted from a doubleton list to a pair.
 define define-macro(wrapped-datum env tail)
   log-debug("Defining macro" wrapped-datum)
@@ -129,13 +129,13 @@ define merge-bindings-reversed!(prior next)
 
 ;;* Attempt to match a single syntax rule pattern.
 ;;*
-;;* Parameters:
+;;* Parameters
 ;;*   ellipsis:    Ellipsis symbol, usually `...`.
 ;;*   literals:    List of literal symbols in the syntax rule patterns.
 ;;*   pattern:     Pattern to match.
 ;;*   expression:  Expression to match against.
 ;;*
-;;* Result:
+;;* Result
 ;;*   A nested association list of the free-variable bindings introduced during matching,
 ;;*   or `#f` if the pattern failed to match.
 define syntax-rule-match(ellipsis literals pattern expression)
@@ -194,11 +194,11 @@ define syntax-rule-match(ellipsis literals pattern expression)
 
 ;;* Extract the names of all macro free-variables appearing in `template`.
 ;;*
-;;* Parameters:
+;;* Parameters
 ;;*   template:  Syntax rule template.
 ;;*   bindings:  Hash map of identifiers to bound data, as returned by [syntax-rule-match].
 ;;*
-;;* Result:
+;;* Result
 ;;*   List of identifiers in `bindings` that appear in `template`,
 ;;*   each appearing in the result as many times as in `template`.
 define extract-variables(template bindings)
@@ -215,11 +215,11 @@ define extract-variables(template bindings)
 ;;* Remove the first repeated value from the binding for each key.
 ;;* It's an error if any of the bindings for `keys` are not repeated.
 ;;*
-;;* Parameters:
+;;* Parameters
 ;;*   bindings:  Hash map of identifiers to bound data, as returned by [syntax-rule-match].
 ;;*   keys:      List of identifiers, as returned by [extract-variables].
 ;;*
-;;* Result:
+;;* Result
 ;;*   The "stripped" bindings, which are non-repeated.
 define strip-repeat-bindings!(bindings keys)
   define aux(keys next-strip)
@@ -252,13 +252,13 @@ define unstrip-leftovers!(bindings strip)
 
 ;;* Expand the template of a matched rule with the given bindings.
 ;;*
-;;* Parameters:
+;;* Parameters
 ;;*   ellipsis:  Ellipsis, usually `...`: [symbol]
 ;;*   template:  Syntax rule template that matched: [wrapped-syntax]
 ;;*   bindings:  Hash map of identifiers to bound wrapped data: [hash-map]
 ;;*              as returned by [syntax-rule-match]
 ;;*
-;;* Result:
+;;* Result
 ;;*   The newly expanded datum: [wrapped-syntax]
 define syntax-rule-expand(ellipsis template bindings)
   ;; HF for easier recursion:
@@ -301,11 +301,11 @@ define syntax-rule-expand(ellipsis template bindings)
 ;;* Expand a macro that has already been matched by leading keyword
 ;;* to a piece of Scheme code (wrapped s-expression).
 ;;*
-;;* Parameters:
+;;* Parameters
 ;;*   wrapped-datum:  Scheme code to expand: [wrapped-syntax]
 ;;*   transformer:    User macro to apply: [transformer]
 ;;*
-;;* Result:
+;;* Result
 ;;*   Expanded version of `wrapped-datum`: [wrapped-syntax]
 define expand-macro(wrapped-datum transformer)
   ;; TODO: Process macros as real wrapped syntax,
@@ -335,10 +335,10 @@ define expand-macro(wrapped-datum transformer)
 ;;* using the embedded [env] in the wrapped syntaxes to create and look up bindings
 ;;* referentially transparently.
 ;;*
-;;* Parameters:
+;;* Parameters
 ;;*   wrapped-datum:  Scheme code to expand: [wrapped-syntax]
 ;;*
-;;* Result:
+;;* Result
 ;;*   Expanded version of `wrapped-datum`: [wrapped-syntax]
 define process-all-macros(wrapped-datum)
   define datum wrapped-syntax.datum(wrapped-datum)
