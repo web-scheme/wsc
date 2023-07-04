@@ -1,11 +1,13 @@
-;;* TODO
+;;* High-level API for transforming wrapped Scheme syntax
+;;* into compiled WASM component modules.
 (define-module (compile)
   #:export (add-imports
             add-globals
             compile-modules
-            new-empty-module
-            wasm-module
-            wasm-module:new)
+            core-module
+            core-module:new
+            new-core-module
+            new-component-module)
   #:use-module (scheme base)
   #:use-module ((compile library) #:select (compile-define-library))
   #:use-module ((syntax wrap) #:select (unwrap-symbol
@@ -14,38 +16,70 @@
   #:use-module ((tools logging) #:select (log-error))
 )
 
-;* An abstract Wasm module.
+;* An abstract Wasm core module.
 ;* Each field is a module section;
 ;* generally a vector of Scheme data representing module-level Wasm instructions in
 ;* [text format](https://webassembly.github.io/spec/core/text/index.html).
-define-record-type wasm-module
-  wasm-module:new(types imports functions tables memories globals exports start elements data)
-  wasm-module?
+define-record-type core-module
+  core-module:new(types imports functions tables memories globals exports start elements data)
+  core-module?
   ;* Vector of [types](https://webassembly.github.io/spec/core/text/types.html).
-  types wasm-module.types wasm-module.set-types!
+  types core-module.types core-module.set-types!
   ;* Vector of [imports](https://webassembly.github.io/spec/core/text/modules.html#imports).
-  imports wasm-module.imports wasm-module.set-imports!
+  imports core-module.imports core-module.set-imports!
   ;* Vector of [functions](https://webassembly.github.io/spec/core/text/modules.html#functions).
-  functions wasm-module.functions wasm-module.set-functions!
+  functions core-module.functions core-module.set-functions!
   ;* Vector of [tables](https://webassembly.github.io/spec/core/text/modules.html#tables).
-  tables wasm-module.tables wasm-module.set-tables!
+  tables core-module.tables core-module.set-tables!
   ;* Vector of [memories](https://webassembly.github.io/spec/core/text/modules.html#memories).
-  memories wasm-module.memories wasm-module.set-memories!
+  memories core-module.memories core-module.set-memories!
   ;* Vector of [globals](https://webassembly.github.io/spec/core/text/modules.html#globals).
-  globals wasm-module.globals wasm-module.set-globals!
+  globals core-module.globals core-module.set-globals!
   ;* Vector of [exports](https://webassembly.github.io/spec/core/text/modules.html#exports).
-  exports wasm-module.exports wasm-module.set-exports!
+  exports core-module.exports core-module.set-exports!
   ;* [Start function](https://webassembly.github.io/spec/core/text/modules.html#start-function) ID
   ;* or null.
-  start wasm-module.start wasm-module.set-start!
+  start core-module.start core-module.set-start!
   ;* Vector of [elements](https://webassembly.github.io/spec/core/text/modules.html#element-segments).
-  elements wasm-module.elements wasm-module.set-elements!
+  elements core-module.elements core-module.set-elements!
   ;* Vector of [data](https://webassembly.github.io/spec/core/text/modules.html#data-segments).
-  data wasm-module.data wasm-module.set-data!
+  data core-module.data core-module.set-data!
 
-;* Return a new, empty [module](wasm-module).
-define new-empty-module()
-  wasm-module:new(#() #() #() #() #() #() #() '() #() #())
+;; TODO: Update with better links / docs once components are standardized.
+;* An abstract Wasm component module.
+;* See https://github.com/WebAssembly/component-model/blob/main/design/mvp/Explainer.md.
+define-record-type component-module
+  component-module:new(core-modules core-instances core-types components instances aliases types start imports exports)
+  component-module?
+  ;* Vector of [core modules](core-module).
+  core-modules component-module.core-modules component-module.set-core-modules!
+  ;* Vector of [core instances](TODO).
+  core-instances component-module.core-instances component-module.set-core-instances!
+  ;* Vector of [core types](TODO).
+  core-types component-module.core-types component-module.set-core-types!
+  ;* Vector of child [components](component-module).
+  components component-module.components component-module.set-components!
+  ;* Vector of component [instances](TODO).
+  instances component-module.instances component-module.set-instances!
+  ;* Vector of [aliases](TODO).
+  aliases component-module.aliases component-module.set-aliases!
+  ;* Vector of component [types](TODO).
+  types component-module.types component-module.set-types!
+  ;* [Start function](TODO) ID
+  ;* or null.
+  start component-module.start component-module.set-start!
+  ;* Vector of component [imports](TODO).
+  imports component-module.imports component-module.set-imports!
+  ;* Vector of component [exports](TODO).
+  exports core-module.exports core-module.set-exports!
+
+;* Return a new, empty [core module](core-module).
+define new-core-module()
+  core-module:new(#() #() #() #() #() #() #() '() #() #())
+
+;* Return a new, empty [component module](component-module).
+define new-component-module()
+  component-module:new(#() #() #() #() #() #() #() '() #() #())
 
 ;; TODO: Make sure to automatically inline the case
 ;;       where `add-imports` is called with a known number of parameters
@@ -53,15 +87,15 @@ define new-empty-module()
 define add-imports(module . imports)
   ;; TODO: `vector-append` unnecessarily allocates a new vector.
   ;;       Optimize here and elsewhere.
-  wasm-module.set-imports!(
+  core-module.set-imports!(
     module
-    vector-append(wasm-module.imports(module)
+    vector-append(core-module.imports(module)
                   apply(vector imports)))
 
 define add-globals(module . globals)
-  wasm-module.set-globals!(
+  core-module.set-globals!(
     module
-    vector-append(wasm-module.globals(module)
+    vector-append(core-module.globals(module)
                   apply(vector globals)))
 
 ;* Compile top-level syntax (a datum with no parent).
@@ -70,7 +104,7 @@ define add-globals(module . globals)
 ;*   syntax: '[wrapped syntax](wrapped-syntax) object'
 ;*
 ;* Result
-;*   Either a [module](wasm-module),
+;*   Either a [module](core-module),
 ;*   or a TODO
 define compile-top-level(syntax)
   switch-s-expr syntax head tail '()
@@ -103,7 +137,7 @@ define compile-top-level(syntax)
 ;*   wrapped-data:  List of [wrapped syntax](wrapped-syntax) objects.
 ;*
 ;* Result
-;*   List of [modules](wasm-module),
+;*   List of [modules](core-module),
 ;*   where the head of the list is an executable module
 ;*   comprised of the Scheme code not enclosed in a library,
 ;*   and any subsequent modules are importable libraries.

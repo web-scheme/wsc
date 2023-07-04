@@ -4,8 +4,8 @@
   #:use-module (scheme base)
   #:use-module ((srfi srfi-26) #:select (cut))
   #:use-module ((compile) #:select (add-imports
-                                    wasm-module
-                                    new-empty-module))
+                                    core-module
+                                    new-core-module))
   #:use-module ((compile define) #:select (compile-define))
   #:use-module ((compile import) #:select (lookup-imports))
   #:use-module ((parse env) #:select (bind-syntax!
@@ -120,13 +120,13 @@ define compile-library-body(name body module)
       THEN
         compile-library-body(name cdr(body) module)
 
-;* Compile a library definition into a [WASM module](wasm-module).
+;* Compile a library definition into a [WASM module](core-module).
 ;*
 ;* Parameters
 ;*   name-and-body:  List containing at least one item.
 ;*
 ;* Result
-;*   Compiled [WASM module](wasm-module).
+;*   Compiled [WASM module](core-module).
 define compile-define-library(name-and-body)
   ;; [https://web-scheme.org/r7rs-small.pdf#subsection.7.1.7]
   define wrapped-name car(name-and-body)
@@ -137,5 +137,5 @@ define compile-define-library(name-and-body)
         compile-library-body(
           map((cut unwrap-library-name-part <> bail) name)
           cdr(name-and-body)
-          new-empty-module())
+          new-core-module())
         bail(log-error("Library name must be a list" wrapped-name))

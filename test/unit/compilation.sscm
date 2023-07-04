@@ -1,7 +1,7 @@
 ;;* Unit tests for compilation from wrapped syntax to compiled modules.
 
 use-modules
-  (compile) #:select (compile-modules wasm-module:new)
+  (compile) #:select (compile-modules core-module:new)
   (parse env) #:select (make-env bind-syntax!)
   (parse macros) #:select (process-all-macros)
   (syntax wrap) #:select (wrapped-syntax:new wrapped-syntax? unwrap-all-syntax)
@@ -46,7 +46,7 @@ test-compilation "A basic library"
        (define x 5)
        (define (foo x) (* x x))
        (display "Bonjour, monde"))))
-  wasm-module:new(
+  core-module:new(
     #()
     #((import $*display "scheme base" "display" anyref)
       );(import $** "scheme base" "*" anyref))

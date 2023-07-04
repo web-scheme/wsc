@@ -2,7 +2,7 @@
 (define-module (compile function)
   #:export (compile-function)
   #:use-module (scheme base)
-  #:use-module ((compile) #:select (wasm-module))
+  #:use-module ((compile) #:select (core-module))
   #:use-module ((tools) #:select (λ))
   #:use-module ((tools logging) #:select (log-error))
 )
