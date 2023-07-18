@@ -1,6 +1,6 @@
 ;;* High-level API for transforming wrapped Scheme syntax
 ;;* into compiled WASM component modules.
-(define-module (compile)
+(define-module (compile module)
   #:export (add-imports
             add-globals
             compile-modules
@@ -22,9 +22,9 @@
   #:use-module ((compile function) #:select (compile-call))
   #:use-module ((compile import) #:select (compile-import))
   #:use-module ((compile library) #:select (compile-define-library))
-  #:use-module ((syntax wrap) #:select (unwrap-symbol
-                                        switch-s-expr
-                                        wrapped-syntax.datum))
+  #:use-module ((parse wrap) #:select (unwrap-symbol
+                                       switch-s-expr
+                                       wrapped-syntax.datum))
   #:use-module ((tools logging) #:select (log-error))
 )
 

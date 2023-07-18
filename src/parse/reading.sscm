@@ -2,7 +2,7 @@
 (define-module (parse reading)
   #:export (read-all-wrapped)
   #:use-module (scheme base)
-  #:use-module ((syntax wrap) #:select (fake-wrap))
+  #:use-module ((parse wrap) #:select (fake-wrap))
   #:use-module ((tools) #:select (λ collect-list))
 )
 

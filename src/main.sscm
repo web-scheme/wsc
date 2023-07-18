@@ -5,7 +5,7 @@ use-modules (ice-9 match)  ; [https://srfi.schemers.org/srfi-200/srfi-200.html]
 add-to-load-path (dirname (current-filename))
 
 use-modules
-  (compile) #:select (compile-modules)
+  (compile module) #:select (compile-modules)
   (parse env) #:select (bind-syntax! make-env)
   (parse macros) #:select (process-all-macros)
   (parse reading) #:select (read-all-wrapped)
@@ -42,7 +42,7 @@ define compile!(filename in-port out-port)
 
 
 use-modules
-  (syntax wrap) #:select (wrapped-syntax:new wrapped-syntax? unwrap-all-syntax)
+  (parse wrap) #:select (wrapped-syntax:new wrapped-syntax? unwrap-all-syntax)
   (tools) #:select (λ map-improper)
 
 define test-wrap(datum)

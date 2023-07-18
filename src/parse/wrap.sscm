@@ -1,5 +1,5 @@
 ;;* Definition of wrapped syntax objects.
-(define-module (syntax wrap)
+(define-module (parse wrap)
   #:export (wrapped-syntax wrapped-syntax:new wrapped-syntax?
             wrapped-syntax.datum wrapped-syntax.set-datum!
             wrapped-syntax.env wrapped-syntax.filename

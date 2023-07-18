@@ -3,19 +3,19 @@
   #:export (compile-define-library)
   #:use-module (scheme base)
   #:use-module ((srfi srfi-26) #:select (cut))
-  #:use-module ((compile) #:select (core-module
-                                    new-core-module))
+  #:use-module ((compile module) #:select (core-module
+                                           new-core-module))
   #:use-module ((compile define) #:select (compile-define))
   #:use-module ((compile import) #:select (compile-import))
   #:use-module ((parse env) #:select (bind-syntax!
                                       lookup-variable-or-builtin
                                       make-env))
-  #:use-module ((syntax wrap) #:select (unwrap-all-syntax
-                                        unwrap-symbol
-                                        unwrap-library-name-part
-                                        switch-s-expr
-                                        wrapped-syntax.datum
-                                        wrapped-syntax.env))
+  #:use-module ((parse wrap) #:select (unwrap-all-syntax
+                                       unwrap-symbol
+                                       unwrap-library-name-part
+                                       switch-s-expr
+                                       wrapped-syntax.datum
+                                       wrapped-syntax.env))
   #:use-module ((tools) #:select (λ builtin-syntax-list))
   #:use-module ((tools logging) #:select (log-error log-warning))
 )

@@ -14,7 +14,7 @@
                                                  hash-table-map!))
   #:use-module ((ice-9 match)          #:select (match))
   #:use-module ((parse env)            #:select (bind-syntax! lookup-syntax))
-  #:use-module ((syntax wrap)          #:select (wrapped-syntax
+  #:use-module ((parse wrap)           #:select (wrapped-syntax
                                                  wrapped-syntax.datum
                                                  wrapped-syntax.set-datum!
                                                  wrapped-syntax.env

@@ -2,9 +2,9 @@
 (define-module (compile define)
   #:export (compile-define)
   #:use-module (scheme base)
-  #:use-module ((compile) #:select (add-globals))
-  #:use-module ((syntax wrap) #:select (switch-s-expr
-                                        wrapped-syntax.datum))
+  #:use-module ((compile module) #:select (add-globals))
+  #:use-module ((parse wrap) #:select (switch-s-expr
+                                       wrapped-syntax.datum))
   #:use-module ((tools) #:select (λ))
   #:use-module ((tools logging) #:select (log-error))
 )

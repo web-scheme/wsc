@@ -1,11 +1,11 @@
 ;;* Unit tests for compilation from wrapped syntax to compiled modules.
 
 use-modules
-  (compile) #:select (compile-modules core-module:new)
+  (compile module) #:select (compile-modules core-module:new)
   (emit text) #:select (emit-text)
   (parse env) #:select (make-env bind-syntax!)
   (parse macros) #:select (process-all-macros)
-  (syntax wrap) #:select (wrapped-syntax:new wrapped-syntax? unwrap-all-syntax)
+  (parse wrap) #:select (wrapped-syntax:new wrapped-syntax? unwrap-all-syntax)
   (tools) #:select (λ map-improper)
   (tap) #:select (before-each test run-tests assert assert-equal)
 

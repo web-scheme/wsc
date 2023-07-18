@@ -2,11 +2,11 @@
 (define-module (compile import)
   #:export (compile-import)
   #:use-module (scheme base)
-  #:use-module ((compile) #:select (add-imports))
+  #:use-module ((compile module) #:select (add-imports))
   #:use-module ((srfi srfi-26) #:select (cut))
-  #:use-module ((syntax wrap) #:select (switch-s-expr
-                                        wrapped-syntax.datum
-                                        unwrap-library-name-part))
+  #:use-module ((parse wrap) #:select (switch-s-expr
+                                       wrapped-syntax.datum
+                                       unwrap-library-name-part))
   #:use-module ((tools) #:select (λ external-rep builtin-syntax-list))
   #:use-module ((tools logging) #:select (log-error))
 )
