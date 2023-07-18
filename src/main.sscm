@@ -18,6 +18,8 @@ define root-env make-env('())
 bind-syntax!(root-env 'define         'define)
 bind-syntax!(root-env 'define-library 'define-library)
 bind-syntax!(root-env 'define-syntax  'define-syntax)
+bind-syntax!(root-env 'display        'display)
+bind-syntax!(root-env 'import         'import)
 
 ;;* Compile Scheme code into a Wasm module.
 ;;*
@@ -57,12 +59,8 @@ define test-wrap(datum)
 
 newline()
 write(compile-modules(map(test-wrap (quote (
-  (define-library (a b c 2 3 d)
-    (import (scheme base))
-    (begin
-      (define x 5)
-      ;(define (foo x) (* x x))
-      (display "Bonjour, monde")))
+  (import (scheme base))
+  (display "Bonjour, monde")
 )))))
 newline()
 newline()

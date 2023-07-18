@@ -2,6 +2,7 @@
 
 use-modules
   (compile) #:select (compile-modules core-module:new)
+  (emit text) #:select (emit-text)
   (parse env) #:select (make-env bind-syntax!)
   (parse macros) #:select (process-all-macros)
   (syntax wrap) #:select (wrapped-syntax:new wrapped-syntax? unwrap-all-syntax)
@@ -12,9 +13,11 @@ define test-env '()
 
 before-each
   set!(test-env make-env('()))
-  bind-syntax!(test-env 'define 'define)
-  bind-syntax!(test-env 'define-syntax 'define-syntax)
+  bind-syntax!(test-env 'define         'define)
   bind-syntax!(test-env 'define-library 'define-library)
+  bind-syntax!(test-env 'define-syntax  'define-syntax)
+  bind-syntax!(test-env 'display        'display)
+  bind-syntax!(test-env 'import         'import)
 
 ;; TODO: Refactor this into a testing utility.
 ;* Return fake wrapped syntax objects for testing.
@@ -35,38 +38,14 @@ define-syntax test-compilation
     (test-compilation description (top-level-data ...) expected-libraries ...)
       test description
         assert-equal(
-          compile-modules(map(test-wrap (quote (top-level-data ...))))
+          map(emit-text
+              compile-modules(map(test-wrap
+                                  (quote (top-level-data ...)))))
           (list expected-libraries ...))
 
-test-compilation "A basic library"
-  ((define-library (a b c 2 3 d)
-     (export x foo)
-     (import (scheme base))
-     (begin
-       (define x 5)
-       (define (foo x) (* x x))
-       (display "Bonjour, monde"))))
-  core-module:new(
-    #()
-    #((import $*display "scheme base" "display" anyref)
-      );(import $** "scheme base" "*" anyref))
-    ; First function is the starting function.
-    ;#((func
-    ;    (return_call_indirect (param anyref) (result anyref)
-    ;      (i32.const 0)))
-    ;  (func (param $x anyref) (result anyref)
-    ;    (return_call_indirect (param anyref) (param anyref) (result anyref)
-    ;      (i32.const 1))))
-    #()
-    ;#((table anyref (elem $*display $**)))
-    #()
-    #()
-    #((global $*x (export "x") anyref (i32.const 5))
-      (global $*foo (export "foo") anyref (ref.func 1)))
-    #()
-    ;'(start 0)
-    '()
-    #()
-    #())
+test-compilation "Hello world"
+  ((import (scheme base))
+   (display "Bonjour, monde"))
+  '(component TODO)
 
 run-tests()

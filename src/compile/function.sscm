@@ -1,16 +1,17 @@
-;;* Compiler implementation for functions.
+;;* Visitors for function implementations.
 (define-module (compile function)
-  #:export (compile-function)
+  #:export (compile-call compile-function)
   #:use-module (scheme base)
   #:use-module ((compile) #:select (core-module))
   #:use-module ((tools) #:select (λ))
   #:use-module ((tools logging) #:select (log-error))
 )
 
-define transpile-param(parameter)
-  `(param anyref)
+;* Compile a function call into a function body.
+define compile-call(syntax function)
+  'TODO
 
-;* Compile an anonymous Scheme function and add it to `module`.
+;* Compile an anonymous Scheme function definition and add it to `module`.
 ;*
 ;* Parameters
 ;*   params-and-body: '[List] with a [wrapped](wrapped-syntax) parameter [list] as a head

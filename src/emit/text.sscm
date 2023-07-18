@@ -1,0 +1,79 @@
+;;* Serialize compiled WASM modules in text format.
+(define-module (emit text)
+  #:export (emit-text)
+  #:use-module (scheme base)
+  #:use-module ((compile module) #:select (component-module.core-modules
+                                           component-module.core-instances
+                                           component-module.core-types
+                                           component-module.components
+                                           component-module.instances
+                                           component-module.aliases
+                                           component-module.types
+                                           component-module.start
+                                           component-module.imports
+                                           component-module.exports))
+  #:use-module ((tools logging) #:select (log-error))
+)
+
+define emit-core-modules(core-modules tail)
+  tail  ; TODO
+
+define emit-core-instances(core-instances tail)
+  tail  ; TODO
+
+define emit-core-types(core-types tail)
+  tail  ; TODO
+
+define emit-components(components tail)
+  tail  ; TODO
+
+define emit-instances(instances tail)
+  tail  ; TODO
+
+define emit-aliases(aliases tail)
+  tail  ; TODO
+
+define emit-types(types tail)
+  tail  ; TODO
+
+define emit-start(start tail)
+  tail  ; TODO
+
+define emit-imports(imports tail)
+  cons('TODO tail)
+
+define emit-exports(exports tail)
+  tail  ; TODO
+
+;* Serialize a compiled WASM module in text format.
+;*
+;* Parameters
+;*   module: [Component module](component-module).
+;*
+;* Result
+;*   A literal s-expression representing the serialized module.
+;*   It can be written to file using the standard [write] procedure.
+define emit-text(module)
+  cons(
+    'component
+    emit-core-modules(
+      component-module.core-modules(module)
+      emit-core-instances(
+        component-module.instances(module)
+        emit-core-types(
+          component-module.types(module)
+          emit-components(
+            component-module.components(module)
+            emit-instances(
+              component-module.instances(module)
+              emit-aliases(
+                component-module.aliases(module)
+                emit-types(
+                  component-module.types(module)
+                  emit-start(
+                    component-module.start(module)
+                    emit-imports(
+                      component-module.imports(module)
+                      emit-exports(
+                        component-module.exports(module)
+                        '())))))))))))

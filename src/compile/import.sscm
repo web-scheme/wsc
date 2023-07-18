@@ -1,7 +1,8 @@
 ;;* Import set parsing and library lookup.
 (define-module (compile import)
-  #:export (lookup-imports)
+  #:export (compile-import)
   #:use-module (scheme base)
+  #:use-module ((compile) #:select (add-imports))
   #:use-module ((srfi srfi-26) #:select (cut))
   #:use-module ((syntax wrap) #:select (switch-s-expr
                                         wrapped-syntax.datum
@@ -70,3 +71,22 @@ define lookup-imports(import-set)
       ;; Import sets are not always syntactic s-expressions; they can start with a number.
       lookup-all-imports(import-set)
     (THEN)  ;; Use an empty THEN block to return the value of the switch case.
+
+;* Validate and compile an import statement.
+;*
+;* Parameters
+;*   import-sets: '[List] of [wrapped syntax](wrapped-syntax) objects
+;*                 representing import sets.'
+;*   module:       Module being compiled.
+;*
+;* Result
+;*   `module` on success, or `#f` on failure.
+define compile-import(import-sets module)
+  if null?(import-sets)
+    module
+    let* ((next-set  car(import-sets))
+          (imports   lookup-imports(next-set)))
+      and imports
+          begin
+            apply(add-imports module imports)
+            compile-import(cdr(import-sets) module)

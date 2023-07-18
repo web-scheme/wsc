@@ -4,11 +4,23 @@
   #:export (add-imports
             add-globals
             compile-modules
+            component-module.core-modules
+            component-module.core-instances
+            component-module.core-types
+            component-module.components
+            component-module.instances
+            component-module.aliases
+            component-module.types
+            component-module.start
+            component-module.imports
+            component-module.exports
             core-module
             core-module:new
             new-core-module
             new-component-module)
   #:use-module (scheme base)
+  #:use-module ((compile function) #:select (compile-call))
+  #:use-module ((compile import) #:select (compile-import))
   #:use-module ((compile library) #:select (compile-define-library))
   #:use-module ((syntax wrap) #:select (unwrap-symbol
                                         switch-s-expr
@@ -71,7 +83,7 @@ define-record-type component-module
   ;* Vector of component [imports](TODO).
   imports component-module.imports component-module.set-imports!
   ;* Vector of component [exports](TODO).
-  exports core-module.exports core-module.set-exports!
+  exports component-module.exports component-module.set-exports!
 
 ;* Return a new, empty [core module](core-module).
 define new-core-module()
@@ -87,49 +99,80 @@ define new-component-module()
 define add-imports(module . imports)
   ;; TODO: `vector-append` unnecessarily allocates a new vector.
   ;;       Optimize here and elsewhere.
-  core-module.set-imports!(
+  component-module.set-imports!(
     module
-    vector-append(core-module.imports(module)
+    vector-append(component-module.imports(module)
                   apply(vector imports)))
 
 define add-globals(module . globals)
-  core-module.set-globals!(
+  component-module.set-globals!(
     module
-    vector-append(core-module.globals(module)
+    vector-append(component-module.globals(module)
                   apply(vector globals)))
 
-;* Compile top-level syntax (a datum with no parent).
+;* Compile a list of top-level syntax into the given main module and companion modules.
 ;*
 ;* Parameters
-;*   syntax: '[wrapped syntax](wrapped-syntax) object'
+;*   wrapped-data:   List of [wrapped syntax](wrapped-syntax) objects.
+;*   main-module:    Main [component module](component-module) in which to compile all syntax
+;*                   besides library definitions.
+;*   other-modules:  List of [Component modules](component-module)
+;*                   from previously-compiled library definitions.
 ;*
 ;* Result
-;*   Either a [module](core-module),
-;*   or a TODO
-define compile-top-level(syntax)
-  switch-s-expr syntax head tail '()
-    'define
-      if null?(tail)
-        log-error("Empty definition" syntax)
-        1  ; TODO
-    'define-library
-      if null?(tail)
-        log-error("Empty library definition" syntax)
-        compile-define-library(tail)
-    'define-syntax
-      if null?(tail)
-        log-error("Empty syntax definition" syntax)
-        3  ; TODO
-    OTHER
-      'TODO
-    UNBOUND
-      log-error("Unbound variable" car(wrapped-syntax.datum(syntax)))
-    ATOM
-      set! resolved unwrap-symbol(syntax)
-      if resolved
-        5  ; TODO
-        6  ; TODO
-    (THEN)
+;*   A list of at least 1 [component modules](component-module),
+;*   where the first module is the main module,
+;*   or `#f` if any syntax fails semantic validation.
+define compile-top-level(wrapped-data main-module other-modules)
+  if null?(wrapped-data)
+    cons(main-module other-modules)
+    let ((syntax      car(wrapped-data))
+         (syntax-rest cdr(wrapped-data)))
+      switch-s-expr syntax head tail '()
+        'import
+          compile-top-level(syntax-rest
+                            (if null?(tail)
+                              (begin
+                                log-error("Empty import" syntax)
+                                main-module)
+                              (compile-import tail main-module))
+                            other-modules)
+        'define
+          compile-top-level(syntax-rest
+                            (if null?(tail)
+                              (begin
+                                log-error("Empty definition" syntax)
+                                main-module)
+                              compile-define(tail main-module))
+                            other-modules)
+        'define-library
+          compile-top-level(syntax-rest
+                            main-module
+                            (if null?(tail)
+                              (begin
+                                log-error("Empty library definition" syntax)
+                                other-modules)
+                              cons(compile-define-library(tail) other-modules)))
+        'define-syntax
+          if null?(tail)
+            log-error("Empty syntax definition" syntax)
+            compile-define-syntax(tail)
+          compile-top-level(syntax-rest main-module other-modules)
+        OTHER
+          ; A top-level function invocation belongs in the module's start function.
+          compile-call(syntax component-module.start(main-module))
+          compile-top-level(syntax-rest main-module other-modules)
+        UNBOUND
+          log-error("Unbound variable" car(wrapped-syntax.datum(syntax)))
+          compile-top-level(syntax-rest main-module other-modules)
+        ATOM
+          let ((resolved unwrap-symbol(syntax)))
+            ;; It's a symbol. Check if it's an unbound reference.
+            when resolved
+              'TODO
+          ;; Atomic expressions can be ignored at the top level.
+          compile-top-level(syntax-rest main-module other-modules)
+        (THEN)
 
 ;* Compile a list of top-level syntax.
 ;*
@@ -137,9 +180,9 @@ define compile-top-level(syntax)
 ;*   wrapped-data:  List of [wrapped syntax](wrapped-syntax) objects.
 ;*
 ;* Result
-;*   List of [modules](core-module),
+;*   List of [modules](component-module),
 ;*   where the head of the list is an executable module
 ;*   comprised of the Scheme code not enclosed in a library,
 ;*   and any subsequent modules are importable libraries.
 define compile-modules(wrapped-data)
-  map(compile-top-level wrapped-data)
+  compile-top-level(wrapped-data new-component-module() '())
