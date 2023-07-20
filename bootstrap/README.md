@@ -7,11 +7,5 @@ and use the forked Guile code to compile the refactored `src` code.
 
 ## Get Started
 
-[Install Guix],
-then set up your development environment:
-
-```
-guix environment --manifest=bootstrap/manifest.scm
-```
-
-[Install Guix]: https://guix.gnu.org/manual/en/html_node/Installation.html
+[Install Guile](https://www.gnu.org/software/guile/download/)
+version 3.0.5 or later.
