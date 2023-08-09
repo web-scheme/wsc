@@ -46,6 +46,7 @@ define-syntax test-compilation
 test-compilation "Hello world"
   ((import (scheme base))
    (display "Bonjour, monde"))
-  '(component TODO)
+  '(component
+     (import "scheme base" (component $c-scheme-base)))
 
 run-tests()

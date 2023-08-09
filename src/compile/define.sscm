@@ -2,7 +2,7 @@
 (define-module (compile define)
   #:export (compile-define)
   #:use-module (scheme base)
-  #:use-module ((compile module) #:select (add-globals))
+  #:use-module ((compile module) #:select (add-global))
   #:use-module ((parse wrap) #:select (switch-s-expr
                                        wrapped-syntax.datum))
   #:use-module ((tools) #:select (λ))
@@ -11,15 +11,11 @@
 
 define compile-define-variable(wrapped-head head body module)
   ;; TODO: Something real.
-  add-globals(
-    module
-    `(global $*x (export "x") anyref (i32.const 5)))
+  add-global(module `(global $*x (export "x") anyref (i32.const 5)))
 
 define compile-define-function(wrapped-head head body module)
   ;; TODO: Something real.
-  add-globals(
-    module
-    `(global $*foo (export "foo") anyref (ref.func 1)))
+  add-global(module `(global $*foo (export "foo") anyref (ref.func 1)))
 
 define compile-define(head-and-body module)
   define wrapped-head car(head-and-body)

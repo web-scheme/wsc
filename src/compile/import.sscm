@@ -2,7 +2,7 @@
 (define-module (compile import)
   #:export (compile-import)
   #:use-module (scheme base)
-  #:use-module ((compile module) #:select (add-imports))
+  #:use-module ((compile module) #:select (add-import))
   #:use-module ((srfi srfi-26) #:select (cut))
   #:use-module ((parse wrap) #:select (switch-s-expr
                                        wrapped-syntax.datum
@@ -10,6 +10,9 @@
   #:use-module ((tools) #:select (λ external-rep builtin-syntax-list))
   #:use-module ((tools logging) #:select (log-error))
 )
+
+define c-id(module-name)
+  '$c-scheme-base
 
 ;* Look up a [library dependency](TODO: Link to help page describing search paths etc.)
 ;* and return all objects exported by that dependency,
@@ -26,13 +29,12 @@ define lookup-all-imports(library-name)
   call/cc
     λ (bail)
       if list?(name)
-        let ((module-name external-rep(map((cut unwrap-library-name-part <> bail) name))))
+        let* ((module-name         map((cut unwrap-library-name-part <> bail) name))
+              (module-name-string  external-rep(module-name)))
           list(
             `(import
-               $*display
-               ,substring(module-name 1 {string-length(module-name) - 1})
-               "display"
-               anyref))
+               ,substring(module-name-string 1 {string-length(module-name-string) - 1})
+               (component ,c-id(module-name))))
         bail(log-error("Library name must be a list" wrapped-name))
 
 ;* Built-in syntax for import sets.
@@ -88,5 +90,7 @@ define compile-import(import-sets module)
           (imports   lookup-imports(next-set)))
       and imports
           begin
-            apply(add-imports module imports)
+            for-each
+              cut add-import module <>
+              imports
             compile-import(cdr(import-sets) module)

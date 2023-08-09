@@ -1,8 +1,8 @@
 ;;* High-level API for transforming wrapped Scheme syntax
 ;;* into compiled WASM component modules.
 (define-module (compile module)
-  #:export (add-imports
-            add-globals
+  #:export (add-import
+            add-global
             compile-modules
             component-module.core-modules
             component-module.core-instances
@@ -30,31 +30,31 @@
 
 ;* An abstract Wasm core module.
 ;* Each field is a module section;
-;* generally a vector of Scheme data representing module-level Wasm instructions in
+;* generally a list of Scheme data representing module-level Wasm instructions in
 ;* [text format](https://webassembly.github.io/spec/core/text/index.html).
 define-record-type core-module
   core-module:new(types imports functions tables memories globals exports start elements data)
   core-module?
-  ;* Vector of [types](https://webassembly.github.io/spec/core/text/types.html).
+  ;* List of [types](https://webassembly.github.io/spec/core/text/types.html).
   types core-module.types core-module.set-types!
-  ;* Vector of [imports](https://webassembly.github.io/spec/core/text/modules.html#imports).
+  ;* List of [imports](https://webassembly.github.io/spec/core/text/modules.html#imports).
   imports core-module.imports core-module.set-imports!
-  ;* Vector of [functions](https://webassembly.github.io/spec/core/text/modules.html#functions).
+  ;* List of [functions](https://webassembly.github.io/spec/core/text/modules.html#functions).
   functions core-module.functions core-module.set-functions!
-  ;* Vector of [tables](https://webassembly.github.io/spec/core/text/modules.html#tables).
+  ;* List of [tables](https://webassembly.github.io/spec/core/text/modules.html#tables).
   tables core-module.tables core-module.set-tables!
-  ;* Vector of [memories](https://webassembly.github.io/spec/core/text/modules.html#memories).
+  ;* List of [memories](https://webassembly.github.io/spec/core/text/modules.html#memories).
   memories core-module.memories core-module.set-memories!
-  ;* Vector of [globals](https://webassembly.github.io/spec/core/text/modules.html#globals).
+  ;* List of [globals](https://webassembly.github.io/spec/core/text/modules.html#globals).
   globals core-module.globals core-module.set-globals!
-  ;* Vector of [exports](https://webassembly.github.io/spec/core/text/modules.html#exports).
+  ;* List of [exports](https://webassembly.github.io/spec/core/text/modules.html#exports).
   exports core-module.exports core-module.set-exports!
   ;* [Start function](https://webassembly.github.io/spec/core/text/modules.html#start-function) ID
   ;* or null.
   start core-module.start core-module.set-start!
-  ;* Vector of [elements](https://webassembly.github.io/spec/core/text/modules.html#element-segments).
+  ;* List of [elements](https://webassembly.github.io/spec/core/text/modules.html#element-segments).
   elements core-module.elements core-module.set-elements!
-  ;* Vector of [data](https://webassembly.github.io/spec/core/text/modules.html#data-segments).
+  ;* List of [data](https://webassembly.github.io/spec/core/text/modules.html#data-segments).
   data core-module.data core-module.set-data!
 
 ;; TODO: Update with better links / docs once components are standardized.
@@ -63,52 +63,45 @@ define-record-type core-module
 define-record-type component-module
   component-module:new(core-modules core-instances core-types components instances aliases types start imports exports)
   component-module?
-  ;* Vector of [core modules](core-module).
+  ;* List of [core modules](core-module).
   core-modules component-module.core-modules component-module.set-core-modules!
-  ;* Vector of [core instances](TODO).
+  ;* List of [core instances](TODO).
   core-instances component-module.core-instances component-module.set-core-instances!
-  ;* Vector of [core types](TODO).
+  ;* List of [core types](TODO).
   core-types component-module.core-types component-module.set-core-types!
-  ;* Vector of child [components](component-module).
+  ;* List of child [components](component-module).
   components component-module.components component-module.set-components!
-  ;* Vector of component [instances](TODO).
+  ;* List of component [instances](TODO).
   instances component-module.instances component-module.set-instances!
-  ;* Vector of [aliases](TODO).
+  ;* List of [aliases](TODO).
   aliases component-module.aliases component-module.set-aliases!
-  ;* Vector of component [types](TODO).
+  ;* List of component [types](TODO).
   types component-module.types component-module.set-types!
   ;* [Start function](TODO) ID
   ;* or null.
   start component-module.start component-module.set-start!
-  ;* Vector of component [imports](TODO).
+  ;* List of component [imports](TODO).
   imports component-module.imports component-module.set-imports!
-  ;* Vector of component [exports](TODO).
+  ;* List of component [exports](TODO).
   exports component-module.exports component-module.set-exports!
 
 ;* Return a new, empty [core module](core-module).
 define new-core-module()
-  core-module:new(#() #() #() #() #() #() #() '() #() #())
+  core-module:new('() '() '() '() '() '() '() '() '() '())
 
 ;* Return a new, empty [component module](component-module).
 define new-component-module()
-  component-module:new(#() #() #() #() #() #() #() '() #() #())
+  component-module:new('() '() '() '() '() '() '() '() '() '())
 
-;; TODO: Make sure to automatically inline the case
-;;       where `add-imports` is called with a known number of parameters
-;;       which are then passed to `apply`.
-define add-imports(module . imports)
-  ;; TODO: `vector-append` unnecessarily allocates a new vector.
-  ;;       Optimize here and elsewhere.
+define add-import(module import)
   component-module.set-imports!(
     module
-    vector-append(component-module.imports(module)
-                  apply(vector imports)))
+    cons(import component-module.imports(module)))
 
-define add-globals(module . globals)
+define add-global(module global)
   component-module.set-globals!(
     module
-    vector-append(component-module.globals(module)
-                  apply(vector globals)))
+    cons(global component-module.globals(module)))
 
 ;* Compile a list of top-level syntax into the given main module and companion modules.
 ;*

@@ -15,35 +15,56 @@
   #:use-module ((tools logging) #:select (log-error))
 )
 
-define emit-core-modules(core-modules tail)
-  tail  ; TODO
+define emit-core-module(core-module)
+  'TODO
 
-define emit-core-instances(core-instances tail)
-  tail  ; TODO
+define emit-core-instance(core-instance)
+  'TODO
 
-define emit-core-types(core-types tail)
-  tail  ; TODO
+define emit-core-type(core-type)
+  'TODO
 
-define emit-components(components tail)
-  tail  ; TODO
+define emit-component(component)
+  'TODO
 
-define emit-instances(instances tail)
-  tail  ; TODO
+define emit-instance(instance)
+  'TODO
 
-define emit-aliases(aliases tail)
-  tail  ; TODO
+define emit-alias(alias)
+  'TODO
 
-define emit-types(types tail)
-  tail  ; TODO
+define emit-type(type)
+  'TODO
 
-define emit-start(start tail)
-  tail  ; TODO
+define emit-start(start)
+  'TODO
 
-define emit-imports(imports tail)
-  cons('TODO tail)
+define emit-import(import)
+  import
 
-define emit-exports(exports tail)
-  tail  ; TODO
+define emit-export(export)
+  export
+
+define map-and-prepend!(proc objs tail)
+  define mutate-next!(pair)
+    set-car!(pair proc(car(pair)))
+    if null?(cdr(pair))
+      set-cdr!(pair tail)
+      mutate-next!(cdr(pair))
+  if null?(objs)
+    tail
+    begin
+      mutate-next!(objs)
+      objs
+
+define-syntax chain-map-and-prepend!
+  syntax-rules ()
+    (chain-map-and-prepend! (objs . proc) next rest ...)
+      map-and-prepend!(
+        proc objs
+        (chain-map-and-prepend! next rest ...))
+    (chain-map-and-prepend! (objs . proc))
+      map-and-prepend!(proc objs '())
 
 ;* Serialize a compiled WASM module in text format.
 ;*
@@ -54,26 +75,16 @@ define emit-exports(exports tail)
 ;*   A literal s-expression representing the serialized module.
 ;*   It can be written to file using the standard [write] procedure.
 define emit-text(module)
-  cons(
+  cons
     'component
-    emit-core-modules(
-      component-module.core-modules(module)
-      emit-core-instances(
-        component-module.instances(module)
-        emit-core-types(
-          component-module.types(module)
-          emit-components(
-            component-module.components(module)
-            emit-instances(
-              component-module.instances(module)
-              emit-aliases(
-                component-module.aliases(module)
-                emit-types(
-                  component-module.types(module)
-                  emit-start(
-                    component-module.start(module)
-                    emit-imports(
-                      component-module.imports(module)
-                      emit-exports(
-                        component-module.exports(module)
-                        '())))))))))))
+    chain-map-and-prepend!
+      component-module.core-modules(module) . emit-core-module
+      component-module.instances(module)    . emit-core-instance
+      component-module.types(module)        . emit-core-type
+      component-module.components(module)   . emit-component
+      component-module.instances(module)    . emit-instance
+      component-module.aliases(module)      . emit-alias
+      component-module.types(module)        . emit-type
+      component-module.start(module)        . emit-start
+      component-module.imports(module)      . emit-import
+      component-module.exports(module)      . emit-export
