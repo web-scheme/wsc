@@ -41,12 +41,13 @@ define-syntax test-compilation
           map(emit-text
               compile-modules(map(test-wrap
                                   (quote (top-level-data ...)))))
-          (list expected-libraries ...))
+          list((quote expected-libraries) ...))
 
 test-compilation "Hello world"
   ((import (scheme base))
    (display "Bonjour, monde"))
-  '(component
-     (import "scheme base" (component $c-scheme-base)))
+  ;; Executable:
+  (component
+    (import "scheme base" (component $c-scheme-base)))
 
 run-tests()
