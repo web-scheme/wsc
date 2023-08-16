@@ -16,14 +16,11 @@ GitHub stars appreciated!
 
 Read [bootstrap/README.md].
 
-Join the [mailing list] to get updates and ask questions.
-It'll probably be pretty quiet for a while.
-Hoping to pick up the pace as WASM matures.
+If you wanna discuss this,
+do that [here](https://matrix.to/#/#web-scheme:matrix.org).
 
 The source code is mostly written using [sweet-expressions].
 Only standard R⁷RS-small.
 
 [bootstrap/README.md]: bootstrap/README.md
-[mailing list]: https://groups.google.com/a/web-scheme.org/g/dev
 [sweet-expressions]: https://srfi.schemers.org/srfi-110/srfi-110.html
-[intermediate hash tables]: https://srfi.schemers.org/srfi-125/srfi-125.html
