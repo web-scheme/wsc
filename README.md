@@ -1,5 +1,10 @@
 # WSC &middot; [![CI status](https://github.com/web-scheme/wsc/actions/workflows/tests.yaml/badge.svg)](https://github.com/web-scheme/wsc/actions/workflows/tests.yaml)
 
+This repository is no longer under active development.
+For an active Scheme-to-Wasm compiler, see [Hoot].
+
+[Hoot]: https://www.spritely.institute/hoot/
+
 The [WebScheme] compiler.
 
 Since most of the Wasm proposals on which this will depend
